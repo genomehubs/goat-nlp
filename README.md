@@ -17,13 +17,11 @@ This project is about bridging the gap between the potential of GoaT to perform 
 - Which species on a project target list are already being sequenced by another EBP partner project? [[API `/search` endpoint](https://goat.genomehubs.org/search?result=taxon&includeEstimates=true&taxonomy=ncbi&query=tax_tree%282759%5BEukaryota%5D%29%20AND%20tax_rank%28species%29%20AND%20long_list%3DDTOL%20AND%20in_progress%3D%21DTOL&fields=long_list%2Cin_progress)]
 - What proportion of reference-quality genome assemblies have been produced by EBP vs non-EBP projects in each of the last 5 years? [[UI report view for 1 year](https://goat.genomehubs.org/search?result=taxon&includeEstimates=true&taxonomy=ncbi&size=50&query=bioproject%3DPRJNA533106%20AND%20tax_rank%28species%29&fields=ebp_standard_date%2Cassembly_level%2Cassembly_span%2Cbioproject&report=arc&rank=species&pointSize=15&cat=bioproject%5B1%2B%5D&y=tax_tree%282759%5BEukaryota%5D%29%20AND%20ebp_standard_date%3E%3D2023%20AND%20ebp_standard_date%3C2024)]
 
-The primary aim is for GoaT-NLP to enable queries like the above, allowing the user interface to be simplified and made more intuitive for inexperienced users. A further goal is to aid in identifying potential gaps in the data and/or the data model. We anticipate that GoaT-NLP will assist in highlighting questions that users would like to ask but that cannot currently be answered to help guide future development and data curation.
-
 ## GenomeHubs project
 
 GoaT is part of a broader collection of tools developed under the GenomeHubs project. A closely related tool, BoaT, indexes data within assemblies, and it is anticipated that development of GoaT-NLP will also benefit BoaT and further GenomeHubs projects still in development. All GenomeHubs source code is open source under the MIT license avaliable from the [GenomeHubs GitHub organisation](https://github.com/genomehubs), primarily in the [genomehubs/genomehubs](https://github.com/genomehubs/genomehubs) repository. Configuration files to define the source data and customise the UI for GoaT are in the [genomehubs/goat-data](https://github.com/genomehubs/goat-data) and the [genomehubs/goat-ui](https://github.com/genomehubs/goat-ui) repositories, respectively.
 
-## Data structure
+### Data structure
 
 In order to support queries like the examples above, GoaT stores directly measured and estimated values for a range of attributes alongside taxonomic information including rank and lineage as a document per taxon in the datastore. The data structure for the taxon index is summarised below, other datatypes including assembly, sample and features are stored in separate indexes.
 
@@ -70,7 +68,9 @@ Each attribute value in the taxon index can be derived from one or more raw valu
 
 The full mapping used is defined in [`taxon.json`](https://github.com/genomehubs/genomehubs/blob/main/src/genomehubs/templates/taxon.json). Similar mappings are used for the other document types.
 
-## Query syntax
+### Query syntax
+
+The query syntax currently used by GoaT it tied to this structured data model. It supports simple and highly-specific queries, but takes time to learn and presents a barrier to wider data access.
 
 GoaT query syntax allows any combination of of `tax_` filters and `<attribute>` `<operator>` `<value>` clauses to be joined with `AND` operators.
 
@@ -88,6 +88,47 @@ Support for logical `OR` operators is currently limited to the ability to provid
 
 Values of summary statistics can also be queried using the `min`, `max`, `mean`, `median` modifiers, e.g. using `min(assembly_date)>=2023-01-01` to find taxa by the earliest assembly date.
 
+## Natural language search
+
+GoaT-NLP aims to extend the capabilities of GoaT to support natural language queries. The project aims to:
+
+- Take natural language queries and convert them to structured queries using the GoaT query syntax.
+
+  ![Static Badge](https://img.shields.io/badge/priority-highest-54278f)
+
+- Automatically select the most appropriate type of search to perform and return results as a natural language statement.
+
+  ![Static Badge](https://img.shields.io/badge/priority-high-756bb1)
+
+- Augment Goat search results with extracts from unstructured text.
+
+  ![Static Badge](https://img.shields.io/badge/priority-medium-9e9ac8)
+
+- Extract information from text using machine learning models for indexing.
+
+  ![Static Badge](https://img.shields.io/badge/priority-low-cbc9e2)
+
 ## Contributing
 
-We are proposing the GoaT-NLP project as a Google Summer of Code project for 2024. If you are interested in contributing to GoaT-NLP, please read the information provided in the [ToL+PaM GSoC 2024 Google Doc](https://docs.google.com/document/d/1vWnJhxWJU4oNsZNheKrP6sx5ZPkOzumwdnL6IIRbDP4).
+We are proposing the GoaT-NLP project as a Google Summer of Code project for 2024. If you are interested in contributing to GoaT-NLP, please read the information provided in the [ToL+PaM GSoC 2024 Google Doc](https://docs.google.com/document/d/1vWnJhxWJU4oNsZNheKrP6sx5ZPkOzumwdnL6IIRbDP4) and use the information in that document to get in touch with any questions you may have.
+
+### Proposals
+
+We will assess applications from potential GSoC contributors on the basis of the proposal. Again, see the [ToL+PaM GSoC 2024 Google Doc](https://docs.google.com/document/d/1vWnJhxWJU4oNsZNheKrP6sx5ZPkOzumwdnL6IIRbDP4) for more, but broadly, we want to know:
+
+- how would approach this project?
+- which technologies would you use and why?
+- what would be the key milestones and when would you reach them?
+- how would you ensure the sustainability of your code beyond the end of the GSoC term?
+
+## Resources
+
+- [GoaT paper](https://wellcomeopenresearch.org/articles/8-24)
+- [GoaT website](https://goat.genomehubs.org)
+- [API documentation](https://goat.genomehubs.org/api/v2/api-docs)
+- [GenomeHubs codebase](https://github.com/genomehubs/genomehubs)
+- [BoaT website](https://boat.genomehubs.org)
+- [Tree of Life](https://www.sanger.ac.uk/programme/tree-of-life/)
+- [Earth BioGenome Project](https://www.earthbiogenome.org)
+- [Google Summer of Code](https://summerofcode.withgoogle.com)
+- [ToL+PaM GSoC 2024 Google Doc](https://docs.google.com/document/d/1vWnJhxWJU4oNsZNheKrP6sx5ZPkOzumwdnL6IIRbDP4)
