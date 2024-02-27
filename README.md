@@ -92,21 +92,15 @@ Values of summary statistics can also be queried using the `min`, `max`, `mean`,
 
 GoaT-NLP aims to extend the capabilities of GoaT to support natural language queries. The project aims to:
 
-- Take natural language queries and convert them to structured queries using the GoaT query syntax.
+- Take natural language queries and convert them to structured queries using the GoaT query syntax. ![Static Badge](https://img.shields.io/badge/priority-highest-54278f)
 
-  ![Static Badge](https://img.shields.io/badge/priority-highest-54278f)
+- Automatically select the most appropriate type of search to perform and return results as a natural language statement. ![Static Badge](https://img.shields.io/badge/priority-high-756bb1)
 
-- Automatically select the most appropriate type of search to perform and return results as a natural language statement.
+- Augment Goat search results with extracts from unstructured text. ![Static Badge](https://img.shields.io/badge/priority-medium-9e9ac8)
 
-  ![Static Badge](https://img.shields.io/badge/priority-high-756bb1)
+- Extract information from text using machine learning models for indexing. ![Static Badge](https://img.shields.io/badge/priority-low-cbc9e2)
 
-- Augment Goat search results with extracts from unstructured text.
-
-  ![Static Badge](https://img.shields.io/badge/priority-medium-9e9ac8)
-
-- Extract information from text using machine learning models for indexing.
-
-  ![Static Badge](https://img.shields.io/badge/priority-low-cbc9e2)
+We are open to suggestions for further directions to develop this project and validation will be as important as information retrieval to ensure the results presented accuratley reflect the intended query.
 
 ## Contributing
 
