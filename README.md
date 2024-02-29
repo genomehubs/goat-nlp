@@ -100,7 +100,7 @@ GoaT-NLP aims to extend the capabilities of GoaT to support natural language que
 
 - Extract information from text using machine learning models for indexing. ![Static Badge](https://img.shields.io/badge/priority-low-cbc9e2)
 
-We are open to suggestions for further directions to develop this project and validation will be as important as information retrieval to ensure the results presented accuratley reflect the intended query.
+We are open to suggestions for further directions to develop this project and validation will be as important as information retrieval to ensure the results presented accurately reflect the intended query.
 
 ## Contributing
 
