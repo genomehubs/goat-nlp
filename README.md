@@ -110,7 +110,7 @@ We are proposing the GoaT-NLP project as a Google Summer of Code project for 202
 
 We will assess applications from potential GSoC contributors on the basis of the proposal. Again, see the [ToL+PaM GSoC 2024 Google Doc](https://docs.google.com/document/d/1vWnJhxWJU4oNsZNheKrP6sx5ZPkOzumwdnL6IIRbDP4) for more, but broadly, we want to know:
 
-- how would approach this project?
+- how would you approach this project?
 - which technologies would you use and why?
 - what would be the key milestones and when would you reach them?
 - how would you ensure the sustainability of your code beyond the end of the GSoC term?
@@ -119,7 +119,7 @@ We will assess applications from potential GSoC contributors on the basis of the
 
 - [GoaT paper](https://wellcomeopenresearch.org/articles/8-24)
 - [GoaT website](https://goat.genomehubs.org)
-- [API documentation](https://goat.genomehubs.org/api/v2/api-docs)
+- [API documentation](https://goat.genomehubs.org/api-docs)
 - [GenomeHubs codebase](https://github.com/genomehubs/genomehubs)
 - [BoaT website](https://boat.genomehubs.org)
 - [Tree of Life](https://www.sanger.ac.uk/programme/tree-of-life/)
