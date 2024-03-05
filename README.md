@@ -126,3 +126,7 @@ We will assess applications from potential GSoC contributors on the basis of the
 - [Earth BioGenome Project](https://www.earthbiogenome.org)
 - [Google Summer of Code](https://summerofcode.withgoogle.com)
 - [ToL+PaM GSoC 2024 Google Doc](https://docs.google.com/document/d/1vWnJhxWJU4oNsZNheKrP6sx5ZPkOzumwdnL6IIRbDP4)
+
+### GoaT videos
+
+GoaT was part of [Biodiversity Genomics Academy 2023 (BGA23)](https://bga23.org), watch the [video tutorial](https://www.youtube.com/watch?v=n-Jghkfi5fQ) or [view the slides](https://docs.google.com/presentation/d/1046_reSbPVvD5YEuHfQ6ZLkNrmWvaIISmXTCc9KNSzI/edit#slide=id.g27b41b4dd96_0_96)
