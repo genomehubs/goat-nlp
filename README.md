@@ -115,6 +115,8 @@ We will assess applications from potential GSoC contributors on the basis of the
 - what would be the key milestones and when would you reach them?
 - how would you ensure the sustainability of your code beyond the end of the GSoC term?
 
+You should follow the [GSoC contibutor guidelines](https://google.github.io/gsocguides/student/writing-a-proposal#) to help structure your proposal. Note that we'd like to see a diagram of your suggested implementation and while we have no fixed length limit, we value the ability to identify and focus on the core elements of your proposal and to write concisely. 
+
 ## Resources
 
 - [GoaT paper](https://wellcomeopenresearch.org/articles/8-24)
