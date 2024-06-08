@@ -10,7 +10,7 @@ import os, json
 
 app = Flask(__name__)
 Settings.embed_model = HuggingFaceEmbedding(model_name="BAAI/bge-base-en-v1.5")
-Settings.llm = Ollama(model="llama3", base_url="https://a34b-34-170-221-238.ngrok-free.app", request_timeout=36000.0)
+Settings.llm = Ollama(model="llama3", base_url="", request_timeout=36000.0)
 
 
 def build_index(documents,
