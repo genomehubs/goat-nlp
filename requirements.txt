@@ -1,0 +1,8 @@
+Flask
+llama-index
+llama-index-llms-ollama
+llama-index-llms-replicate
+llama-index-embeddings-huggingface
+llama-parse
+replicate
+Werkzeug==2.2.2
