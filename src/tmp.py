@@ -22,7 +22,7 @@ def main():
     """
     Main function to execute the linting workflow.
     """
-    directory = "/path/to/your/directory"  # Replace with the actual directory path
+    directory = '/path/to/your/directory'  # Replace with the actual directory path
     lint_files(directory)
 
 if __name__ == "__main__":
