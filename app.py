@@ -1,10 +1,18 @@
+import sys
 from flask import Flask, request, render_template, jsonify
 from index import load_index, query_engine
 from query_reformulation import fetch_related_taxons
 import json
+import logging
 
 
-app = Flask(__name__)
+app = Flask("goat_nlp")
+
+handler = logging.StreamHandler(sys.stdout)
+handler.setFormatter(logging.Formatter(
+    '%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+app.logger.addHandler(handler)
+app.logger.setLevel(logging.INFO)
 
 
 def chat_bot_rag(query):

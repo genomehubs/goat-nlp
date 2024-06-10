@@ -14,7 +14,8 @@ from query_engine import GoaTAPIQueryEngine
 
 load_dotenv()
 Settings.embed_model = HuggingFaceEmbedding(model_name="BAAI/bge-base-en-v1.5")
-Settings.llm = Ollama(model="llama3", base_url=os.environ["OLLAMA_HOST_URL"],
+Settings.llm = Ollama(model="llama3", base_url=os.environ
+                      .get("OLLAMA_HOST_URL", "http://127.0.0.1:11434"),
                       request_timeout=36000.0)
 Settings.chunk_size = 256
 
@@ -22,7 +23,25 @@ Settings.chunk_size = 256
 def build_index(documents,
                 save_dir="rich_query_index",
                 force=False):
-    if not os.path.exists(save_dir):
+    '''
+    Build the index from the given rich queries and save it in the specified
+    directory.
+
+    Parameters:
+        - documents (list): A list of rich queries to build the index from.
+        - save_dir (str): The directory path where the index will be saved.
+            Defaults to "rich_query_index".
+        - force (bool): If True, forces the index to be rebuilt even if the
+            save directory already exists. Defaults to False.
+
+    Returns:
+        - query_index (VectorStoreIndex): The built index.
+
+    Raises:
+        - FileNotFoundError: If the save directory does not exist and force is
+            set to False.
+    '''
+    if not os.path.exists(save_dir) or force:
         query_index = VectorStoreIndex.from_documents(
             documents
         )
@@ -36,6 +55,17 @@ def build_index(documents,
 
 
 def load_index(force_reload=False):
+    '''
+    Load the index and query engine for the GoaT NLP system.
+
+    Parameters:
+        force_reload (bool): If True, force reload the index and rebuild it.
+            Default is False.
+
+    Returns:
+        tuple: A tuple containing the index and query engine.
+
+    '''
     documents = SimpleDirectoryReader(
         "rich_queries"
     ).load_data()
