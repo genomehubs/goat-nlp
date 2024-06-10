@@ -1,11 +1,5 @@
 [tool.black]
 line-length = 88
-include = '\.pyi?$'
-exclude = '''
-/(
-    \.git
-)/
-'''
 
 [tool.isort]
 profile = "black"
