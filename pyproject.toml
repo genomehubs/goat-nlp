@@ -1,0 +1,15 @@
+[tool.black]
+line-length = 88
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+)/
+'''
+
+[tool.isort]
+profile = "black"
+
+[flake8]
+max-line-length = 88
+extend-ignore = E203,E701
