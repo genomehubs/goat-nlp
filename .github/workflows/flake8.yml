@@ -21,4 +21,4 @@ jobs:
           max_line_length: 88
           path: src
           plugins: flake8-black flake8-isort flake8-quotes
-          error_classes: E,H,I00
+          error_classes: E,H,I00,Q00
