@@ -6,3 +6,8 @@ required-version = '24.4.2'
 
 [tool.isort]
 profile = "black"
+
+[flake8]
+max-line-length = 88
+extend-ignore = E203,E701
+inline-quotes = double

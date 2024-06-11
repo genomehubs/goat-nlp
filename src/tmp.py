@@ -4,8 +4,8 @@
 This script is used for developing a GitHub workflow for linting.
 """
 
-import subprocess
 import os
+import subprocess
 
 
 def lint_files(directory):
@@ -22,7 +22,7 @@ def main():
     """
     Main function to execute the linting workflow.
     """
-    directory = '/path/to/your/directory'  # Replace with the actual directory path
+    directory = '/path/to/your/directory'
     lint_files(directory)
 
 if __name__ == "__main__":
