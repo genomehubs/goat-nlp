@@ -1,11 +1,11 @@
-import os
-import subprocess
-
 #!/usr/bin/env python3
 
 """
 This script is used for developing a GitHub workflow for linting.
 """
+
+import subprocess
+import os
 
 
 def lint_files(directory):
