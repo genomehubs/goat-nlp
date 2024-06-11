@@ -17,6 +17,8 @@ def lint_files(directory):
             if file.endswith(".py"):
                 file_path = os.path.join(root, file)
                 subprocess.run(["flake8", file_path])
+    value = 1
+    return value
 
 
 def main():
