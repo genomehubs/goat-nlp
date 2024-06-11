@@ -18,12 +18,14 @@ def lint_files(directory):
                 file_path = os.path.join(root, file)
                 subprocess.run(["flake8", file_path])
 
+
 def main():
     """
     Main function to execute the linting workflow.
     """
-    directory = '/path/to/your/directory'
+    directory = "/path/to/your/directory"
     lint_files(directory)
+
 
 if __name__ == "__main__":
     main()
