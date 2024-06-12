@@ -1,0 +1,9 @@
+[tool.black]
+line-length = 88
+target-version = ['py39', 'py310', 'py311', 'py312']
+include = '\.pyi?$'
+required-version = '24.4.2'
+
+[tool.isort]
+profile = "black"
+
