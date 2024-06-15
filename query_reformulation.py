@@ -29,7 +29,7 @@ def fetch_related_taxons(query: str):
 
     """
     entity_taxon_map = {}
-    for i in range(int(os.environ.get("RETRY_COUNT", 3))):
+    for i in range(int(os.getenv("RETRY_COUNT", 3))):
         try:
             llm_response = Settings.llm.complete(wrap_with_entity_prompt(query))
             entities = json.loads(llm_response.text)['entity']
@@ -65,7 +65,7 @@ def goat_api_call_for_taxon(entities: list) -> dict:
     entity_result_map = {}
     for entity in entities:
         try:
-            response = requests.get(os.environ.get('GOAT_BASE_URL', 'https://goat.genomehubs.org/api/v2')
+            response = requests.get(os.getenv('GOAT_BASE_URL', 'https://goat.genomehubs.org/api/v2')
                                     + f"/lookup?searchTerm={entity}"
                                     + "&result=taxon&taxonomy=ncbi")
             json_data = response.json() if response and response.status_code == 200 else None
