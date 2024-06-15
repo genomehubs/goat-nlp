@@ -29,7 +29,7 @@ def fetch_related_taxons(query: str):
 
     """
     entity_taxon_map = {}
-    for i in range(int(os.getenv("RETRY_COUNT", 3))):
+    for _ in range(int(os.getenv("RETRY_COUNT", 3))):
         try:
             llm_response = Settings.llm.complete(wrap_with_entity_prompt(query))
             entities = json.loads(llm_response.text)['entity']

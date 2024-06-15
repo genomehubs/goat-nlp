@@ -40,7 +40,7 @@ class GoaTAPIQueryEngine(CustomQueryEngine):
         nodes = self.retriever.retrieve(query_str)
 
         context_str = "\n\n".join([n.node.get_content() for n in nodes])
-        current_time = datetime.today().strftime('%Y-%m-%d %H:%M:%S')
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         populated_prompt = self.qa_prompt.format(context_str=context_str, query_str=query_str,
                                   entity_taxon_map=entity_taxon_map,
                                   time=current_time)

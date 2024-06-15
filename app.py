@@ -17,10 +17,9 @@ app.logger.setLevel(logging.INFO)
 
 def chat_bot_rag(query):
     entity_taxon_map = fetch_related_taxons(query)
-    window_response = query_engine.custom_query(query,
-                                                entity_taxon_map)
 
-    return window_response
+    return query_engine.custom_query(query,
+                                    entity_taxon_map)
 
 
 @app.route('/')
