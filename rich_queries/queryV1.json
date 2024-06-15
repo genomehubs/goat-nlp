@@ -1,0 +1,70 @@
+[
+    {
+        "english_query": "What species of bats have been sequenced?",
+        "api_query": "https://goat.genomehubs.org/search?result=taxon&includeEstimates=true&summaryValues=count&taxonomy=ncbi&size=100&offset=0&query=tax_tree%289397%5BChiroptera%5D%29%20AND%20tax_rank%28species%29%20AND%20assembly_span&excludeMissing%5B0%5D=assembly_span&excludeAncestral%5B0%5D=assembly_span"
+    },
+    {
+        "english_query": "How many assemblies have been produced this month?",
+        "api_query": "https://goat.genomehubs.org/search?result=assembly&includeEstimates=false&summaryValues=count&taxonomy=ncbi&size=100&offset=0&query=last_updated%3E%3D2024-05-01&fields=assembly_span%2Cassembly_level%2Clast_updated&names=&ranks=&excludeMissing%5B0%5D=assembly_level"
+    },
+    {
+        "english_query": "What’s the sequencing status of the greater spear-nosed bat?",
+        "api_query": "https://goat.genomehubs.org/search?query=tax_name%289423%5BPhyllostomus%20hastatus%5D%29%20AND%20sequencing_status&result=taxon&includeEstimates=false&summaryValues=count&taxonomy=ncbi&size=100&offset=0&fields=sequencing_status&names=&ranks="
+    },
+    {
+        "english_query": "What information do we have about spiders?",
+        "api_query": "https://goat.genomehubs.org/record?recordId=6893&result=taxon&taxonomy=ncbi#Araneae"
+    },
+    {
+        "english_query": "Does Borneo magnolia have RNA-sequencing?",
+        "api_query": "https://goat.genomehubs.org/search?result=taxon&includeEstimates=true&summaryValues=count&taxonomy=ncbi&size=100&offset=0&fields=total_runs%2Ctotal_reads%2Clibrary_source%2Cplatform%2Csra_accession%2Crun_accession%2Creads&names=&ranks=&query=tax_name%282933196%5BMagnolia%20borneensis%5D%29%20AND%20sra_accession&emptyColumns=true"
+    },
+    {
+        "english_query": "What mushroom species have RNA seq?",
+        "api_query": "https://goat.genomehubs.org/search?result=taxon&includeEstimates=true&summaryValues=count&taxonomy=ncbi&size=100&offset=0&fields=total_runs%2Ctotal_reads%2Clibrary_source%2Cplatform%2Csra_accession%2Crun_accession%2Creads&names=&ranks=&query=tax_tree%285204%5BBasidiomycota%5D%29%20AND%20tax_rank%28species%29%20AND%20sra_accession"
+    },
+    {
+        "english_query": "How many bird species have genome assemblies?",
+        "api_query": "https://goat.genomehubs.org/search?query=tax_tree%288782%5BAves%5D%29%20AND%20tax_rank%28species%29%20AND%20assembly_span&result=taxon&includeEstimates=true&summaryValues=count&taxonomy=ncbi&emptyColumns=false&excludeAncestral%5B0%5D=assembly_span&excludeMissing%5B0%5D=assembly_spanhttps://goat.genomehubs.org/search?result=taxon&includeEstimates=true&summaryValues=count&taxonomy=ncbi&size=100&offset=0&query=tax_tree%281442%5BAves%5D%29%20AND%20tax_rank%28species%29%20AND%20assembly_span&excludeMissing%5B0%5D=assembly_span&excludeAncestral%5B0%5D=assembly_span"
+    },
+    {
+        "english_query": "What sequencing platforms are used for rodent transcriptomes?",
+        "api_query": "https://goat.genomehubs.org/search?result=taxon&includeEstimates=true&summaryValues=count&taxonomy=ncbi&size=100&offset=0&fields=platform&names=&ranks=&query=tax_tree%289989%5BRodentia%5D%29%20AND%20platformhttps://goat.genomehubs.org/search?result=taxon&includeEstimates=true&summaryValues=count&taxonomy=ncbi&size=100&offset=0&fields=platform&names=&ranks=&query=tax_tree%281472%5BRodentia%5D%29%20AND%20platform"
+    },
+    {
+        "english_query": "List all assemblies for humans",
+        "api_query": "https://goat.genomehubs.org/search?result=assembly&includeEstimates=false&summaryValues=count&taxonomy=ncbi&size=100&offset=0&query=tax_name%289606%5BHomo%20sapiens%5D%29%20AND%20assembly_level"
+    },
+    {
+        "english_query": "Find samples with RNA-seq data for wolves",
+        "api_query": "https://goat.genomehubs.org/search?result=sample&includeEstimates=true&summaryValues=count&taxonomy=ncbi&size=100&offset=0&fields=sra_accession%2Clibrary_source%2Crun_accession%2Cplatform%2Creads&names=&ranks=&query=tax_name%289612%5BCanis%20lupus%5D%29%20AND%20sra_accession"
+    },
+    {
+        "english_query": "How many genome assemblies are available for the genus fruit fly?",
+        "api_query": "https://goat.genomehubs.org/search?result=assembly&includeEstimates=true&summaryValues=count&taxonomy=ncbi&size=100&offset=0&query=tax_tree%287215%5BDrosophila%5D%29%20AND%20assembly_span"
+    },
+    {
+        "english_query": "What are the latest assemblies for the family cat?",
+        "api_query": "https://goat.genomehubs.org/search?result=assembly&includeEstimates=false&summaryValues=count&taxonomy=ncbi&size=100&offset=0&query=tax_tree%289681%5BFelidae%5D%29%20AND%20last_updated%3E%3D2024-01-01&fields=assembly_span%2Cassembly_level%2Clast_updatedhttps://goat.genomehubs.org/search?result=assembly&includeEstimates=false&summaryValues=count&taxonomy=ncbi&size=100&offset=0&query=tax_tree%289685%5BFelidae%5D%29%20AND%20last_updated%3E%3D2024-01-01&fields=assembly_span%2Cassembly_level%2Clast_updated"
+    },
+    {
+        "english_query": "Which species in the order Primates have been sequenced?",
+        "api_query": "https://goat.genomehubs.org/search?result=taxon&includeEstimates=true&summaryValues=count&taxonomy=ncbi&size=100&offset=0&query=tax_tree%289443%5BPrimates%5D%29%20AND%20tax_rank%28species%29%20AND%20assembly_span&excludeMissing%5B0%5D=assembly_span&excludeAncestral%5B0%5D=assembly_span"
+    },
+    {
+        "english_query": "Do any samples for cattle include RNA-seq data?",
+        "api_query": "https://goat.genomehubs.org/search?result=sample&includeEstimates=true&summaryValues=count&taxonomy=ncbi&size=100&offset=0&fields=sra_accession%2Clibrary_source%2Crun_accession%2Cplatform%2Creads&names=&ranks=&query=tax_name%289913%5BBos%20taurus%5D%29%20AND%20sra_accession"
+    },
+    {
+        "english_query": "How many genome assemblies for fungi have been updated recently?",
+        "api_query": "https://goat.genomehubs.org/search?result=assembly&includeEstimates=false&summaryValues=count&taxonomy=ncbi&size=100&offset=0&query=tax_tree%284751%5BFungi%5D%29%20AND%20last_updated%3E%3D2024-01-01"
+    },
+    {
+        "english_query": "Find all genome assemblies for reptiles.",
+        "api_query": "https://goat.genomehubs.org/search?result=assembly&includeEstimates=true&summaryValues=count&taxonomy=ncbi&size=100&offset=0&query=tax_tree%288504%5BReptilia%5D%29%20AND%20assembly_span&excludeMissing%5B0%5D=assembly_spanhttps://goat.genomehubs.org/search?result=assembly&includeEstimates=true&summaryValues=count&taxonomy=ncbi&size=100&offset=0&query=tax_tree%288457%5BReptilia%5D%29%20AND%20assembly_span&excludeMissing%5B0%5D=assembly_span"
+    },
+    {
+        "english_query": "What are the available RNA-seq platforms for the common fruit fly?",
+        "api_query": "https://goat.genomehubs.org/search?result=taxon&includeEstimates=true&summaryValues=count&taxonomy=ncbi&size=100&offset=0&fields=platform&names=&ranks=&query=tax_name%287227%5BDrosophila%20melanogaster%5D%29%20AND%20sra_accession"
+    }
+]
