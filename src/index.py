@@ -2,11 +2,13 @@ from dotenv import load_dotenv
 from llama_index.core import VectorStoreIndex, StorageContext
 from llama_index.core import load_index_from_storage
 from llama_index.core import get_response_synthesizer
-from llama_index.core import SimpleDirectoryReader
 from llama_index.core import Settings
 from llama_index.llms.ollama import Ollama
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 import os
+import json
+
+from llama_index.core.schema import TextNode
 
 from prompt import QUERY_PROMPT
 from query_engine import GoaTAPIQueryEngine
@@ -14,14 +16,14 @@ from query_engine import GoaTAPIQueryEngine
 
 load_dotenv()
 Settings.embed_model = HuggingFaceEmbedding(model_name="BAAI/bge-base-en-v1.5")
-Settings.llm = Ollama(model="llama3", base_url=os.
+Settings.llm = Ollama(model="codellama", base_url=os.
                       getenv("OLLAMA_HOST_URL", "http://127.0.0.1:11434"),
                       request_timeout=36000.0)
 Settings.chunk_size = 256
 
 
 def build_index(documents,
-                save_dir="rich_query_index",
+                save_dir="query_index",
                 force=False):
     '''
     Build the index from the given rich queries and save it in the specified
@@ -42,7 +44,7 @@ def build_index(documents,
             set to False.
     '''
     if not os.path.exists(save_dir) or force:
-        query_index = VectorStoreIndex.from_documents(
+        query_index = VectorStoreIndex(
             documents
         )
         query_index.storage_context.persist(persist_dir=save_dir)
@@ -66,18 +68,21 @@ def load_index(force_reload=False):
         tuple: A tuple containing the index and query engine.
 
     '''
-    documents = SimpleDirectoryReader(
-        "rich_queries"
-    ).load_data()
+    query_list = json.load(open("queries/script_generated_queries.json"))
+    for x in query_list:
+        x.pop('api_query', None)
+    question_store = {x['english_query']: x for x in query_list}
 
-    index = build_index(documents, force=force_reload)
-    retriever = index.as_retriever(similarity_top_k=3)
+    index = build_index([TextNode(text=x) for x in question_store.keys()],
+                        force=force_reload)
+    retriever = index.as_retriever(similarity_top_k=5)
     synthesizer = get_response_synthesizer(response_mode="compact")
 
     query_engine = GoaTAPIQueryEngine(
         retriever=retriever,
         response_synthesizer=synthesizer,
         llm=Settings.llm,
+        question_store=question_store,
         qa_prompt=QUERY_PROMPT,
     )
 
