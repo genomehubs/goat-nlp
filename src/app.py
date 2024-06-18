@@ -10,8 +10,9 @@ import logging
 app = Flask("goat_nlp")
 
 handler = logging.StreamHandler(sys.stdout)
-handler.setFormatter(logging.Formatter(
-    '%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+handler.setFormatter(
+    logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+)
 app.logger.addHandler(handler)
 app.logger.setLevel(logging.INFO)
 
@@ -19,25 +20,35 @@ app.logger.setLevel(logging.INFO)
 def construct_url(json_output):
     base_url = "https://goat.genomehubs.org/"
     endpoint = "search?"
+    suffix = "&result=taxon&summaryValues=count&taxonomy=ncbi&offset=0"
+    suffix += "&fields=assembly_level%2Cassembly_span%2Cgenome_size%2C"
+    suffix += "chromosome_number%2Chaploid_number&names=common_name&ranks="
+    suffix += "&includeEstimates=false&size=100"
 
-    if json_output['intent'] == 'count':
+    if json_output["intent"] == "count":
         endpoint = "count?"
-    elif json_output['intent'] == 'record':
+    elif json_output["intent"] == "record":
         endpoint = "record?"
 
     params = []
 
-    if 'taxon' in json_output:
+    if "taxon" in json_output:
         params.append(f"tax_tree(* {json_output['taxon']})")
-    if 'rank' in json_output:
+    if "rank" in json_output:
         params.append(f"tax_rank({json_output['rank']})")
-    if 'field' in json_output:
+    if "field" in json_output:
         params.append(f"{json_output['field']}")
     if "time_frame_query" in json_output:
         params.append(f"{json_output['time_frame_query']}")
+        suffix = "&result=assembly&summaryValues=count&taxonomy=ncbi&offset=0"
+        suffix += "&fields=assembly_level%2Cassembly_span%2Cgenome_size%2C"
+        suffix += "chromosome_number%2Chaploid_number&names=common_name&ranks="
+        suffix += "&includeEstimates=false&size=100"
 
     query_string = " AND ".join(params)
-    return base_url + endpoint + "query=" + urllib.parse.quote_plus(query_string) + "&result=taxon&summaryValues=count&taxonomy=ncbi&offset=0&fields=assembly_level%2Cassembly_span%2Cgenome_size%2Cchromosome_number%2Chaploid_number&names=common_name&ranks=&includeEstimates=false&size=100"
+    return (
+        base_url + endpoint + "query=" + urllib.parse.quote_plus(query_string) + suffix
+    )
 
 
 def chat_bot_rag(query):
@@ -51,19 +62,19 @@ def chat_bot_rag(query):
     return construct_url(json.loads(query_engine.custom_query(query)))
 
 
-@app.route('/')
+@app.route("/")
 def home():
-    return render_template('chat.html')
+    return render_template("chat.html")
 
 
-@app.route('/rebuildIndex')
+@app.route("/rebuildIndex")
 def index():
     load_index(force_reload=True)
 
 
-@app.route('/chat', methods=['POST'])
+@app.route("/chat", methods=["POST"])
 def chat():
-    user_message = request.form['user_input']
+    user_message = request.form["user_input"]
     bot_message = chat_bot_rag(user_message)
 
     try:
@@ -71,8 +82,8 @@ def chat():
     except Exception:
         pass
 
-    return jsonify({'response': str(bot_message)})
+    return jsonify({"response": str(bot_message)})
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     app.run(debug=True)

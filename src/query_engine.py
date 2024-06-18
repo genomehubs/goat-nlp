@@ -8,7 +8,7 @@ from llama_index.core import PromptTemplate
 from datetime import datetime
 
 
-logger = logging.getLogger('goat_nlp.query_engine')
+logger = logging.getLogger("goat_nlp.query_engine")
 
 
 class GoaTAPIQueryEngine(CustomQueryEngine):
@@ -42,16 +42,18 @@ class GoaTAPIQueryEngine(CustomQueryEngine):
         """
         nodes = self.retriever.retrieve(query_str)
 
-        context_str = "\n\n".join([json.dumps(self.question_store[n.node.get_content()],
-                                              indent=2) for n in nodes])
-        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        populated_prompt = self.qa_prompt.format(context_str=context_str,
-                                                 query_str=query_str,
-                                                 time=current_time)
-        logger.info(populated_prompt)
-        response = self.llm.complete(
-            populated_prompt
+        context_str = "\n\n".join(
+            [
+                json.dumps(self.question_store[n.node.get_content()], indent=2)
+                for n in nodes
+            ]
         )
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        populated_prompt = self.qa_prompt.format(
+            context_str=context_str, query_str=query_str, time=current_time
+        )
+        logger.info(populated_prompt)
+        response = self.llm.complete(populated_prompt)
         logger.info(response)
 
         return str(response)
