@@ -21,10 +21,12 @@ app.logger.setLevel(logging.INFO)
 def construct_url(json_output):
     base_url = "https://goat.genomehubs.org/"
     endpoint = "search?"
-    suffix = "&result=taxon&summaryValues=count&taxonomy=ncbi&offset=0"
-    suffix += "&fields=assembly_level%2Cassembly_span%2Cgenome_size%2C"
-    suffix += "chromosome_number%2Chaploid_number&names=common_name&ranks="
-    suffix += "&includeEstimates=false&size=100"
+    suffix = (
+        "&result=taxon&summaryValues=count&taxonomy=ncbi&offset=0"
+        + "&fields=assembly_level%2Cassembly_span%2Cgenome_size%2C"
+        + "chromosome_number%2Chaploid_number&names=common_name&ranks="
+        + "&includeEstimates=false&size=100"
+    )
 
     if json_output["intent"] == "count":
         endpoint = "count?"
@@ -41,10 +43,12 @@ def construct_url(json_output):
         params.append(f"{json_output['field']}")
     if "time_frame_query" in json_output:
         params.append(f"{json_output['time_frame_query']}")
-        suffix = "&result=assembly&summaryValues=count&taxonomy=ncbi&offset=0"
-        suffix += "&fields=assembly_level%2Cassembly_span%2Cgenome_size%2C"
-        suffix += "chromosome_number%2Chaploid_number&names=common_name&ranks="
-        suffix += "&includeEstimates=false&size=100"
+        suffix = (
+            "&result=assembly&summaryValues=count&taxonomy=ncbi&offset=0"
+            + "&fields=assembly_level%2Cassembly_span%2Cgenome_size%2C"
+            + "chromosome_number%2Chaploid_number&names=common_name&ranks="
+            + "&includeEstimates=false&size=100"
+        )
 
     query_string = " AND ".join(params)
     return (
