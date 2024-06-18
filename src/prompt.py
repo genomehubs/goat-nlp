@@ -1,6 +1,5 @@
 from llama_index.core import PromptTemplate
 
-
 QUERY_PROMPT = PromptTemplate(
     """We need to parse a query given by the user.
 The user is asking a genomics question, we need to parse the query into different parts.

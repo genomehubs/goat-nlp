@@ -3,7 +3,9 @@ import logging
 import os
 import sys
 import urllib
+
 from flask import Flask, jsonify, render_template, request
+
 from index import load_index, query_engine
 
 app = Flask("goat_nlp")
