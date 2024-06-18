@@ -73,9 +73,7 @@ def load_index(force_reload=False):
         x.pop("api_query", None)
     question_store = {x["english_query"]: x for x in query_list}
 
-    index = build_index(
-        [TextNode(text=x) for x in question_store.keys()], force=force_reload
-    )
+    index = build_index([TextNode(text=x) for x in question_store], force=force_reload)
     retriever = index.as_retriever(similarity_top_k=5)
     synthesizer = get_response_synthesizer(response_mode="compact")
 
