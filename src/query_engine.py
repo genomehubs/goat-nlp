@@ -1,12 +1,12 @@
 import json
 import logging
-from llama_index.llms.ollama import Ollama
-from llama_index.core.query_engine import CustomQueryEngine
-from llama_index.core.retrievers import BaseRetriever
-from llama_index.core.response_synthesizers import BaseSynthesizer
-from llama_index.core import PromptTemplate
 from datetime import datetime
 
+from llama_index.core import PromptTemplate
+from llama_index.core.query_engine import CustomQueryEngine
+from llama_index.core.response_synthesizers import BaseSynthesizer
+from llama_index.core.retrievers import BaseRetriever
+from llama_index.llms.ollama import Ollama
 
 logger = logging.getLogger("goat_nlp.query_engine")
 

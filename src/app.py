@@ -1,11 +1,10 @@
-import os
-import sys
-from flask import Flask, request, render_template, jsonify
-import urllib
-from index import load_index, query_engine
 import json
 import logging
-
+import os
+import sys
+import urllib
+from flask import Flask, jsonify, render_template, request
+from index import load_index, query_engine
 
 app = Flask("goat_nlp")
 

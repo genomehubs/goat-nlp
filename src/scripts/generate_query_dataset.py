@@ -1,7 +1,7 @@
-import json
 import itertools
-from datetime import datetime
+import json
 import urllib.parse
+from datetime import datetime
 
 # Define the lists of entities
 taxa = [

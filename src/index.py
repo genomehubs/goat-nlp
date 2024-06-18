@@ -1,18 +1,20 @@
-from dotenv import load_dotenv
-from llama_index.core import VectorStoreIndex, StorageContext
-from llama_index.core import load_index_from_storage
-from llama_index.core import get_response_synthesizer
-from llama_index.core import Settings
-from llama_index.llms.ollama import Ollama
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-import os
 import json
+import os
 
+from dotenv import load_dotenv
+from llama_index.core import (
+    Settings,
+    StorageContext,
+    VectorStoreIndex,
+    get_response_synthesizer,
+    load_index_from_storage,
+)
 from llama_index.core.schema import TextNode
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+from llama_index.llms.ollama import Ollama
 
 from prompt import QUERY_PROMPT
 from query_engine import GoaTAPIQueryEngine
-
 
 load_dotenv()
 Settings.embed_model = HuggingFaceEmbedding(model_name="BAAI/bge-base-en-v1.5")
