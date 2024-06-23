@@ -107,8 +107,8 @@
 
             function addMessage(sender, message) {
                 var messageElement;
-                if (sender == 'bot' && message != 'Bot is typing...' && message != 'Sorry, something went wrong.')
-                    messageElement = $('<div class="message ' + sender + '-message"><a href=' + message + ' target="_blank">GoaT Link!</a></div>');
+                if (sender == 'bot' && message != 'Bot is typing...' && message != 'Sorry, something went wrong.' && message['json_debug'])
+                    messageElement = $('<div class="message ' + sender + '-message"><a href=' + message['url'] + ' target="_blank">GoaT Link!</a><div>' + message['json_debug'] + '</div></div>');
                 else
                     messageElement = $('<div class="message ' + sender + '-message"></div>').text(message);
                 $('#chat_log').append(messageElement);
@@ -127,7 +127,8 @@
                     data: { user_input: message },
                     success: function (response) {
                         $('.bot-message').last().remove();
-                        addMessage('bot', response.response);
+                        console.log(response)
+                        addMessage('bot', response);
                     },
                     error: function () {
                         $('.bot-message').last().remove();

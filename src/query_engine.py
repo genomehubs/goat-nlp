@@ -52,7 +52,7 @@ class GoaTAPIQueryEngine(CustomQueryEngine):
         populated_prompt = self.qa_prompt.format(
             context_str=context_str, query_str=query_str, time=current_time
         )
-        logger.info(populated_prompt)
+        # logger.info(populated_prompt)
         response = self.llm.complete(populated_prompt)
         logger.info(response)
 

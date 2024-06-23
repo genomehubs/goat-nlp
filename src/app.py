@@ -4,7 +4,7 @@ import os
 import sys
 import urllib
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, render_template, request
 
 from index import load_index, query_engine
 
@@ -29,7 +29,7 @@ def construct_url(json_output):
     )
 
     if json_output["intent"] == "count":
-        endpoint = "count?"
+        endpoint = "api/v2/count?"
     elif json_output["intent"] == "record":
         endpoint = "record?"
 
@@ -51,20 +51,27 @@ def construct_url(json_output):
         )
 
     query_string = " AND ".join(params)
-    return (
-        base_url + endpoint + "query=" + urllib.parse.quote_plus(query_string) + suffix
-    )
+    return base_url + endpoint + "query=" + urllib.parse.quote(query_string) + suffix
 
 
 def chat_bot_rag(query):
     # entity_taxon_map = fetch_related_taxons(query)
     for _ in range(int(os.getenv("RETRY_COUNT", 3))):
         try:
-            return construct_url(json.loads(query_engine.custom_query(query)))
+            model_response = json.loads(query_engine.custom_query(query))
+            return {
+                "json_debug": json.dumps(model_response, indent=2),
+                "url": construct_url(model_response),
+            }
+            # return construct_url(json.loads(query_engine.custom_query(query)))
         except Exception as e:
             app.logger.error(f"Error: {e}")
             app.logger.error("Retrying...")
-    return construct_url(json.loads(query_engine.custom_query(query)))
+    model_response = json.loads(query_engine.custom_query(query))
+    return {
+        "json_debug": json.dumps(model_response, indent=2),
+        "url": construct_url(model_response),
+    }
 
 
 @app.route("/")
@@ -79,15 +86,7 @@ def index():
 
 @app.route("/chat", methods=["POST"])
 def chat():
-    user_message = request.form["user_input"]
-    bot_message = chat_bot_rag(user_message)
-
-    try:
-        bot_message = json.loads(bot_message)["url"]
-    except Exception:
-        pass
-
-    return jsonify({"response": str(bot_message)})
+    return chat_bot_rag(request.form["user_input"])
 
 
 if __name__ == "__main__":
