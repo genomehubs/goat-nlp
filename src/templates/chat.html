@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -16,6 +17,7 @@
             height: 100vh;
             margin: 0;
         }
+
         #container {
             background-color: #ffffff;
             border-radius: 10px;
@@ -27,6 +29,7 @@
             flex-direction: column;
             height: 80vh;
         }
+
         h1 {
             text-align: center;
             background-color: #324d36;
@@ -34,30 +37,36 @@
             margin: 0;
             padding: 15px 0;
         }
+
         #chat_log {
             flex: 1;
             padding: 15px;
             overflow-y: auto;
             border-bottom: 1px solid #ddd;
         }
+
         .message {
             margin-bottom: 10px;
             padding: 10px;
             border-radius: 10px;
             max-width: 75%;
         }
+
         .user-message {
             background-color: #dcf8c6;
             align-self: flex-end;
         }
+
         .bot-message {
             background-color: #f1f0f0;
             align-self: flex-start;
         }
+
         #chat_form {
             display: flex;
             border-top: 1px solid #ddd;
         }
+
         #user_input {
             flex: 1;
             border: none;
@@ -65,9 +74,11 @@
             font-size: 16px;
             border-radius: 0;
         }
+
         #user_input:focus {
             outline: none;
         }
+
         button[type="submit"] {
             background-color: #394239;
             color: white;
@@ -77,6 +88,7 @@
             font-size: 16px;
             border-radius: 0;
         }
+
         button[type="submit"]:hover {
             background-color: #45a049;
         }
@@ -94,7 +106,11 @@
             });
 
             function addMessage(sender, message) {
-                var messageElement = $('<div class="message ' + sender + '-message"></div>').text(message);
+                var messageElement;
+                if (sender == 'bot' && message != 'Bot is typing...' && message != 'Sorry, something went wrong.' && message['json_debug'])
+                    messageElement = $('<div class="message ' + sender + '-message"><a href=' + message['url'] + ' target="_blank">GoaT Link!</a><div>' + message['json_debug'] + '</div></div>');
+                else
+                    messageElement = $('<div class="message ' + sender + '-message"></div>').text(message);
                 $('#chat_log').append(messageElement);
                 scrollToBottom();
             }
@@ -111,7 +127,8 @@
                     data: { user_input: message },
                     success: function (response) {
                         $('.bot-message').last().remove();
-                        addMessage('bot', response.response);
+                        console.log(response)
+                        addMessage('bot', response);
                     },
                     error: function () {
                         $('.bot-message').last().remove();
@@ -122,12 +139,13 @@
         });
     </script>
 </head>
+
 <body>
     <div id="container">
         <h1>GoaT NLP Tester</h1>
         <div id="chat_log">
             <div class="message bot-message">
-                <p>You are connected to LLama3, enter a query to get the API URL in the response</p>
+                <p>Welcome to GoaT NLP, enter any query about a species, family, genus and get its relevant GoaT URL</p>
             </div>
         </div>
         <form id="chat_form" method="post">
@@ -136,4 +154,5 @@
         </form>
     </div>
 </body>
+
 </html>
