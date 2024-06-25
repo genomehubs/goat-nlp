@@ -52,7 +52,7 @@ curl -fsSL https://ollama.com/install.sh | sh
 Run the Ollama application:
 
 ```bash
-ollama run codellama
+ollama run llama3
 ```
 
 ## Step 7: Start the Flask Application

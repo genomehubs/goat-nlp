@@ -19,7 +19,7 @@ from query_engine import GoaTAPIQueryEngine
 load_dotenv()
 Settings.embed_model = HuggingFaceEmbedding(model_name="BAAI/bge-base-en-v1.5")
 Settings.llm = Ollama(
-    model="codellama",
+    model="llama3",
     base_url=os.getenv("OLLAMA_HOST_URL", "http://127.0.0.1:11434"),
     request_timeout=36000.0,
 )

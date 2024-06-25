@@ -1,12 +1,29 @@
-import json
 import logging
-import os
 import sys
-import urllib
 
+import llama_index.core
+import phoenix as px
 from flask import Flask, render_template, request
+from llama_index.core.agent import QueryPipelineAgentWorker
+from llama_index.core.callbacks import CallbackManager
+from openinference.instrumentation.llama_index import LlamaIndexInstrumentor
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk import trace as trace_sdk
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 
-from index import load_index, query_engine
+from agent.query_pipeline import qp
+from index import load_index
+
+agent_worker = QueryPipelineAgentWorker(qp)
+agent = agent_worker.as_agent(callback_manager=CallbackManager([]), verbose=True)
+
+px.launch_app()
+llama_index.core.set_global_handler("arize_phoenix")
+endpoint = "http://127.0.0.1:6006/v1/traces"
+tracer_provider = trace_sdk.TracerProvider()
+tracer_provider.add_span_processor(SimpleSpanProcessor(OTLPSpanExporter(endpoint)))
+
+LlamaIndexInstrumentor().instrument(tracer_provider=tracer_provider)
 
 app = Flask("goat_nlp")
 
@@ -16,62 +33,6 @@ handler.setFormatter(
 )
 app.logger.addHandler(handler)
 app.logger.setLevel(logging.INFO)
-
-
-def construct_url(json_output):
-    base_url = "https://goat.genomehubs.org/"
-    endpoint = "search?"
-    suffix = (
-        "&result=taxon&summaryValues=count&taxonomy=ncbi&offset=0"
-        + "&fields=assembly_level%2Cassembly_span%2Cgenome_size%2C"
-        + "chromosome_number%2Chaploid_number&names=common_name&ranks="
-        + "&includeEstimates=false&size=100"
-    )
-
-    if json_output["intent"] == "count":
-        endpoint = "api/v2/count?"
-    elif json_output["intent"] == "record":
-        endpoint = "record?"
-
-    params = []
-
-    if "taxon" in json_output:
-        params.append(f"tax_tree(* {json_output['taxon']})")
-    if "rank" in json_output:
-        params.append(f"tax_rank({json_output['rank']})")
-    if "field" in json_output:
-        params.append(f"{json_output['field']}")
-    if "time_frame_query" in json_output:
-        params.append(f"{json_output['time_frame_query']}")
-        suffix = (
-            "&result=assembly&summaryValues=count&taxonomy=ncbi&offset=0"
-            + "&fields=assembly_level%2Cassembly_span%2Cgenome_size%2C"
-            + "chromosome_number%2Chaploid_number&names=common_name&ranks="
-            + "&includeEstimates=false&size=100"
-        )
-
-    query_string = " AND ".join(params)
-    return base_url + endpoint + "query=" + urllib.parse.quote(query_string) + suffix
-
-
-def chat_bot_rag(query):
-    # entity_taxon_map = fetch_related_taxons(query)
-    for _ in range(int(os.getenv("RETRY_COUNT", 3))):
-        try:
-            model_response = json.loads(query_engine.custom_query(query))
-            return {
-                "json_debug": json.dumps(model_response, indent=2),
-                "url": construct_url(model_response),
-            }
-            # return construct_url(json.loads(query_engine.custom_query(query)))
-        except Exception as e:
-            app.logger.error(f"Error: {e}")
-            app.logger.error("Retrying...")
-    model_response = json.loads(query_engine.custom_query(query))
-    return {
-        "json_debug": json.dumps(model_response, indent=2),
-        "url": construct_url(model_response),
-    }
 
 
 @app.route("/")
@@ -86,7 +47,9 @@ def index():
 
 @app.route("/chat", methods=["POST"])
 def chat():
-    return chat_bot_rag(request.form["user_input"])
+    agent.reset()
+    response = agent.chat(request.form["user_input"] + "\nI only want the URL.")
+    return {"url": str(response), "json_debug": ""}
 
 
 if __name__ == "__main__":
