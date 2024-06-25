@@ -85,8 +85,6 @@ query_engine_tools = [
                 "This tool HAS to be called after the query is parsed and a JSON object"
                 " is created."
                 "This tool validates the JSON against the original query."
-                "The input has to be a JSON string that can be parsed using"
-                " json.loads() function."
                 'Sample input to this tool: {"previous_json_output":\n{\n  '
                 '"taxon": "bat", ...\n},\n"user_query": ""\n}'
                 "The tool will return a JSON object with a 'valid' key that"

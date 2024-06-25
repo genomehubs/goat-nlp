@@ -113,7 +113,7 @@ Please answer in the following format:
 Thought: I need to use a tool to help me answer the question.
 Action: tool name (one of {tool_names}) if using a tool.
 Action Input: the input to the tool, in a JSON format representing the kwargs
- (e.g. {{"input": "hello world", "num_beams": 5}})
+ (e.g. {{"kwarg1": "hello world", "kwarg2": 5}})
 ```
 
 Please ALWAYS start with a Thought.
@@ -142,6 +142,11 @@ Answer: [your answer here (final goat genomehubs URL)]
 Thought: I cannot answer the question with the provided tools.
 Answer: [Reason behind not being able to answer the question]
 ```
+The usual flow of tools to reach the correct answer would be as follows:
+1. construct_json_from_query
+2. validate_json_query_conditions
+3. correct_json_query_conditions
+4. construct_url
 
 ## Current Conversation
 Below is the current conversation consisting of interleaving human and

@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 
 import llama_index.core
@@ -48,8 +49,13 @@ def index():
 @app.route("/chat", methods=["POST"])
 def chat():
     agent.reset()
-    response = agent.chat(request.form["user_input"] + "\nI only want the URL.")
-    return {"url": str(response), "json_debug": ""}
+    for _ in range(os.getenv("RETRY_LIMIT", 3)):
+        try:
+            response = agent.chat(request.form["user_input"] + "\nI only want the URL.")
+            return {"url": str(response), "json_debug": ""}
+        except Exception:
+            continue
+    return {"url": "", "json_debug": ""}
 
 
 if __name__ == "__main__":
