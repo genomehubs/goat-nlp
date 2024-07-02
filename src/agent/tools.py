@@ -1,5 +1,8 @@
+import json
 import urllib
 
+import requests
+from llama_index.core import Settings
 from llama_index.core.tools import FunctionTool, QueryEngineTool, ToolMetadata
 
 from agent.validators import (
@@ -7,12 +10,14 @@ from agent.validators import (
     validate_json_query_conditions,
 )
 from index import query_engine
+from prompt import BEST_URL_PROMPT
 
 
 def construct_url(
-    input: dict,
+    json_output: dict,
+    tax_query: str,
+    taxon: str,
 ):
-    json_output = input
     base_url = "https://goat.genomehubs.org/"
     endpoint = "search?"
     suffix = (
@@ -30,7 +35,7 @@ def construct_url(
     params = []
 
     if "taxon" in json_output:
-        params.append(f"tax_tree(* {json_output['taxon']})")
+        params.append(tax_query.format(taxon))
     if "rank" in json_output:
         params.append(f"tax_rank({json_output['rank']})")
     if "field" in json_output:
@@ -48,50 +53,75 @@ def construct_url(
     return base_url + endpoint + "query=" + urllib.parse.quote(query_string) + suffix
 
 
+def get_best_url(input: dict):
+    """
+
+    This tool should be called towards the END.
+    It constructs a set of URLs from the JSON output of the previous tool.
+    The input to this tool should be as follows:
+    {"input": {"taxon": "...", ...}}
+
+    """
+    tax_options = ["tax_tree(* {})", "tax_tree({})", "tax_name({})", "tax_name(* {})"]
+    urls = []
+    for tax_query in tax_options:
+        for taxon in [
+            input["singular_form_taxon"],
+            input["plural_form_taxon"],
+            input["scientific_form_taxon"],
+        ]:
+            urls.append(construct_url(input, tax_query, taxon))
+
+    print("calling pick_best_url")
+    pick_best_url(input, urls)
+    return urls
+
+
+def call_api_and_filter_response(url: str):
+    response = requests.get(url)
+    response_parsed = response.json()
+    if not response_parsed["success"]:
+        return {
+            "success": False,
+            "error": response_parsed["error"],
+        }
+    filtered_response = {}
+    filtered_response["hits"] = response_parsed["status"]["hits"]
+    filtered_response["results"] = []
+    for result in response_parsed["results"]:
+        filtered_result = {}
+        filtered_result["taxon_rank"] = result["taxon_rank"]
+        filtered_response["scientific_name"] = result["scientific_name"]
+        filtered_response["names"] = result["names"]
+        filtered_response["fields"] = result["fields"].keys()
+    return filtered_response
+
+
+def pick_best_url(input: dict, urls: list[str]):
+    """
+
+    This tool should be called at the VERY END.
+    This tool picks the best URL from the list of URLs.
+    You also need to pass the original user query to this tool.
+
+    """
+    url_response_dict = {url: call_api_and_filter_response(url) for url in urls}
+
+    print("Inside pick_best_url")
+    response = Settings.llm.complete(
+        BEST_URL_PROMPT.format(
+            url_responses=json.dumps(url_response_dict, indent=4),
+            user_query=json.dumps(input, indent=4),
+        )
+    )
+
+    return response
+
+
 query_engine_tools = [
-    FunctionTool(
-        fn=construct_url,
-        metadata=ToolMetadata(
-            name="construct_url",
-            description=(
-                "This tool should be called at the VERY END."
-                "This tool constructs a URL from the JSON output of the previous tool."
-                'Sample input to this tool: {\ninput: \n{\n  "taxon": "bat", ...\n}\n}'
-            ),
-        ),
-    ),
-    FunctionTool(
-        fn=correct_json_query_conditions,
-        metadata=ToolMetadata(
-            name="correct_json_query_conditions",
-            description=(
-                "This tool HAS to be called only after the query is validated"
-                "and valid is False."
-                "This tool corrects the incorrect JSON based on the reason provided."
-                "The input has to be a JSON string that can be parsed"
-                " using json.loads() function."
-                'Sample input to this tool: {"previous_json_output":\n{\n'
-                '  "taxon": "bat", ...\n},\n"user_query": "", "reason": ""\n}'
-                "The tool will return a JSON object with a 'valid' key that will be"
-                " True if the JSON is correct and False otherwise.",
-            ),
-        ),
-    ),
-    FunctionTool(
-        fn=validate_json_query_conditions,
-        metadata=ToolMetadata(
-            name="validate_json_query_conditions",
-            description=(
-                "This tool HAS to be called after the query is parsed and a JSON object"
-                " is created."
-                "This tool validates the JSON against the original query."
-                'Sample input to this tool: {"previous_json_output":\n{\n  '
-                '"taxon": "bat", ...\n},\n"user_query": ""\n}'
-                "The tool will return a JSON object with a 'valid' key that"
-                " will be True if the JSON is correct and False otherwise."
-            ),
-        ),
-    ),
+    FunctionTool.from_defaults(get_best_url),
+    FunctionTool.from_defaults(correct_json_query_conditions),
+    FunctionTool.from_defaults(validate_json_query_conditions),
     QueryEngineTool(
         query_engine=query_engine,
         metadata=ToolMetadata(

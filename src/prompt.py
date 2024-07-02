@@ -11,8 +11,6 @@ Use the examples given below as reference:
 
 The current date and time is {time}
 Use this for any time related calculation
-Change all entities from PLURAL to SINGULAR form
-e.g. elephants will be converted to elephant in the output, wolves to wolf
 
 
 Query given by the user:
@@ -27,13 +25,23 @@ Time related queries will always have the last_updated field in the time_frame_q
 You can use >= and <= operators to filter such data. e.g. last_updated>=2021-01-01
 
 ------
-ONLY RETURN THE JSON OF THE FOLLOWING FORMAT AND NOTHING ELSE
+
+ADD THREE NEW FIELDS IN THE JSON (These may not be present in the examples):
+1. "singular_form_taxon": "bat"
+2. "plural_form_taxon": "bats"
+3. "scientific_form_taxon": "Chiroptera"
+
+------
+ONLY RETURN THE JSON IN THE FOLLOWING FORMAT AND NOTHING ELSE
 {{
     "taxon": "...",
     "rank": "...",
     "phrase": "...",
     "intent": "...",
-    "field": "..."
+    "field": "...",
+    "singular_form_taxon": "...",
+    "plural_form_taxon": "...",
+    "scientific_form_taxon": "..."
     "time_frame": "...",
     "time_frame_query": "..."
     ...
@@ -91,6 +99,35 @@ JSON_RETRY_PROMPT = PromptTemplate(
     """,
 )
 
+BEST_URL_PROMPT = PromptTemplate(
+    """
+We are in the process of converting a query (related to genomics) given by a user,
+to a relevant goat genomehubs API URL.
+
+We have shortlisted a bunch of URLs based on the user query.
+All of these URLs were tested and their responses are attached here.
+
+Being an expert in genomics, you need to select the best URL from the list.
+While selecting the best URL, you need to consider the following:
+1. The response should have good quality results.
+2. The entities in the response should be the closest match to the user query.
+3. The API call should be successful. (this can be checked by looking at the
+ success key).
+
+If all API calls are unsuccessful, reply as follows:
+'The API calls were unsuccessful. Please reconsider the query and try again.'
+
+User query:
+{user_query}
+
+URLs and their responses:
+{url_responses}
+
+------
+Once you have identified the best URL, reply with JUST A SINGLE BEST URL.
+"""
+)
+
 AGENT_SYSTEM_PROMPT = """
 You are an intelligent assistant who is very well versed with genomics.
 Users come to you with a variety of questions related to genomics.
@@ -105,6 +142,8 @@ to complete each subtask.
 
 You have access to the following tools:
 {tool_desc}
+
+
 
 ## Output Format
 Please answer in the following format:
@@ -134,7 +173,7 @@ in the one of the following two formats:
 ```
 Thought: I have all the information and do not need to use any more tools.
  I have verified that all conditions from the user query are satisfied
-   and used the construct_url tool.
+   and used the get_best_url tool.
 Answer: [your answer here (final goat genomehubs URL)]
 ```
 
@@ -142,11 +181,12 @@ Answer: [your answer here (final goat genomehubs URL)]
 Thought: I cannot answer the question with the provided tools.
 Answer: [Reason behind not being able to answer the question]
 ```
-The usual flow of tools to reach the correct answer would be as follows:
+
+## USUAL TOOL FLOW:
 1. construct_json_from_query
 2. validate_json_query_conditions
 3. correct_json_query_conditions
-4. construct_url
+4. get_best_url
 
 ## Current Conversation
 Below is the current conversation consisting of interleaving human and
