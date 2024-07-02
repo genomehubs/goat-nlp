@@ -107,7 +107,7 @@
 
             function addMessage(sender, message) {
                 var messageElement;
-                if (sender == 'bot' && message != 'Bot is typing...' && message != 'Sorry, something went wrong.' && message['json_debug'])
+                if (sender == 'bot' && message != 'Bot is typing...' && message != 'Sorry, something went wrong.' && message['url'])
                     messageElement = $('<div class="message ' + sender + '-message"><a href=' + message['url'] + ' target="_blank">GoaT Link!</a><div>' + message['json_debug'] + '</div></div>');
                 else
                     messageElement = $('<div class="message ' + sender + '-message"></div>').text(message);
