@@ -13,6 +13,7 @@ from prompt import (
     INDEX_PROMPT,
     INTENT_PROMPT,
     RANK_PROMPT,
+    RECORD_PROMPT,
     TIME_PROMPT,
 )
 
@@ -120,12 +121,12 @@ def construct_query(input: str, state: Dict[str, Any]):
         entities += f"* {entity['singular_form']},"
         entities += f"* {entity['plural_form']},"
 
-    entities.removesuffix(",")
+    entities = entities.removesuffix(",")
 
     query = ""
 
     if entities != "":
-        query += f"tax_tree({entities}) AND "
+        query += f"tax_name({entities}) AND "
 
     if state["rank"]["rank"] != "":
         query += f"tax_rank({state['rank']['rank']}) AND "
@@ -151,7 +152,7 @@ def construct_query(input: str, state: Dict[str, Any]):
                     + f'{attribute["value"]} AND '
                 )
 
-    query.removesuffix(" AND ")
+    query = query.removesuffix(" AND ")
 
     state["query"] = query
 
@@ -169,4 +170,48 @@ def construct_url(input: str, state: Dict[str, Any]):
 
     state["final_url"] = (
         base_url + endpoint + "query=" + urllib.parse.quote(state["query"]) + suffix
+    )
+
+
+def identify_record(input: str, state: Dict[str, Any]):
+    entities = ""
+    for entity in state["entity"]["entities"]:
+        entities += f"{entity['singular_form']},"
+        entities += f"{entity['plural_form']},"
+        entities += f"{entity['scientific_name']},"
+        entities += f"* {entity['singular_form']},"
+        entities += f"* {entity['plural_form']},"
+
+    query_url = (
+        "https://goat.genomehubs.org/api/v2/search?query="
+        + urllib.parse.quote(f"tax_name({entities})")
+        + "&result=taxon"
+    )
+
+    response = requests.get(query_url)
+    response_parsed = response.json()
+    cleaned_taxons = []
+
+    for res in response_parsed["results"]:
+        cleaned_taxons.append(
+            {
+                "taxon_id": res["result"]["taxon_id"],
+                "taxon_rank": res["result"]["taxon_rank"],
+                "scientific_name": res["result"]["scientific_name"],
+                "taxon_names": res["result"]["taxon_names"],
+            }
+        )
+
+    taxon_response = Settings.llm.complete(
+        RECORD_PROMPT.format(query=input, results=json.dumps(cleaned_taxons, indent=4))
+    ).text
+    state["record"] = json.loads(extract_json_str(taxon_response))
+
+    if "taxon_id" not in state["record"] or "explanation" not in state["record"]:
+        raise ValueError("Invalid response from model at record identification stage.")
+
+    state["final_url"] = (
+        "https://goat.genomehubs.org/record?recordId="
+        + str(state["record"]["taxon_id"])
+        + f"&result={state['index']['classification']}"
     )

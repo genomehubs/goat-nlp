@@ -224,10 +224,44 @@ You need to reply in the following format:
 }}
 
 If there are no attributes in the query, return an empty list.
-REMEMBER: The attributes list in your response must be filled ONLY if
+
+
+**REMEMBER:** The attributes list in your response must be filled **ONLY** if
 the user has explicitly mentioned that attribute in the query.
-DO NOT assume that an attribute is IMPLIED in the query.
-IN MOST CASES, YOUR RESPONSE WILL BE AN EMPTY LIST.
+
+This means that "ebp_date" (or any other attribute) will not be included in
+the list unless the phrase "ebp_date" is given in the query by the user.
+
+**DO NOT** assume that an attribute is **IMPLIED** in the query.
+**IN MOST CASES, YOUR RESPONSE WILL BE AN EMPTY LIST.**
+
+```json
+"""
+)
+
+RECORD_PROMPT = PromptTemplate(
+    """
+You are an intelligent assistant who **ONLY ANSWERS IN JSON FORMAT**.
+
+A user is trying to query a genomics database.
+
+We have already queried the database against the user's query.
+
+We have a set of results from the database, we need to pick the best match.
+
+The query by the user is as follows:
+`{query}`
+
+The results from the database are as follows:
+{results}
+
+You need to return the best taxon from the results in the following JSON format:
+{{
+    "taxon_id": "...",
+    "explanation": "..."
+}}
+
+The taxon_id HAS TO BE AN INTEGER.
 
 ```json
 """

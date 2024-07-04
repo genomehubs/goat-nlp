@@ -5,16 +5,20 @@ import sys
 import llama_index.core
 import phoenix as px
 from flask import Flask, render_template, request
+from llama_index.core import Settings
+from llama_index.llms.ollama import Ollama
 from openinference.instrumentation.llama_index import LlamaIndexInstrumentor
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk import trace as trace_sdk
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 
 from agent.query_pipeline import qp
-from index import load_index
 
-# agent_worker = QueryPipelineAgentWorker(qp)
-# agent = agent_worker.as_agent(callback_manager=CallbackManager([]), verbose=True)
+Settings.llm = Ollama(
+    model="llama3",
+    base_url=os.getenv("OLLAMA_HOST_URL", "http://127.0.0.1:11434"),
+    request_timeout=36000.0,
+)
 
 px.launch_app()
 llama_index.core.set_global_handler("arize_phoenix")
@@ -37,11 +41,6 @@ app.logger.setLevel(logging.INFO)
 @app.route("/")
 def home():
     return render_template("chat.html")
-
-
-@app.route("/rebuildIndex")
-def index():
-    load_index(force_reload=True)
 
 
 @app.route("/chat", methods=["POST"])
