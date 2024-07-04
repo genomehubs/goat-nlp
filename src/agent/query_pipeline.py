@@ -1,9 +1,6 @@
-import os
-
 from llama_index.core.query_pipeline import QueryPipeline as QP
-from llama_index.llms.ollama import Ollama
 
-from agent.components import (
+from agent.component_helpers import (
     construct_query,
     construct_url,
     identify_attributes,
@@ -13,44 +10,22 @@ from agent.components import (
     identify_rank,
     identify_time_frame,
 )
+from agent.goat_query_component import GoatQueryComponent
 
 qp = QP(verbose=True)
 
 qp.add_modules(
     {
-        "llm": Ollama(
-            model="llama3",
-            base_url=os.getenv("OLLAMA_HOST_URL", "http://127.0.0.1:11434"),
-            request_timeout=36000.0,
-        ),
-        "index": identify_index,
-        "entity": identify_entity,
-        "rank": identify_rank,
-        "intent": identify_intent,
-        "attribute": identify_attributes,
-        "time": identify_time_frame,
-        "query": construct_query,
-        "url": construct_url,
+        "index": GoatQueryComponent(fn=identify_index),
+        "entity": GoatQueryComponent(fn=identify_entity),
+        "rank": GoatQueryComponent(fn=identify_rank),
+        "intent": GoatQueryComponent(fn=identify_intent),
+        "attribute": GoatQueryComponent(fn=identify_attributes),
+        "time": GoatQueryComponent(fn=identify_time_frame),
+        "query": GoatQueryComponent(fn=construct_query),
+        "url": GoatQueryComponent(fn=construct_url),
     }
 )
 
 
 qp.add_chain(["intent", "index", "entity", "rank", "attribute", "time", "query", "url"])
-
-
-# qp.add_link(
-#     "react_output_parser",
-#     "run_tool",
-#     condition_fn=lambda x: not x["done"],
-#     input_fn=lambda x: x["reasoning_step"],
-# )
-
-# qp.add_link(
-#     "react_output_parser",
-#     "process_response",
-#     condition_fn=lambda x: x["done"],
-#     input_fn=lambda x: x["reasoning_step"],
-# )
-
-# qp.add_link("process_response", "process_agent_response")
-# qp.add_link("run_tool", "process_agent_response")

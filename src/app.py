@@ -5,8 +5,6 @@ import sys
 import llama_index.core
 import phoenix as px
 from flask import Flask, render_template, request
-from llama_index.core.agent import QueryPipelineAgentWorker
-from llama_index.core.callbacks import CallbackManager
 from openinference.instrumentation.llama_index import LlamaIndexInstrumentor
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk import trace as trace_sdk
@@ -15,8 +13,8 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from agent.query_pipeline import qp
 from index import load_index
 
-agent_worker = QueryPipelineAgentWorker(qp)
-agent = agent_worker.as_agent(callback_manager=CallbackManager([]), verbose=True)
+# agent_worker = QueryPipelineAgentWorker(qp)
+# agent = agent_worker.as_agent(callback_manager=CallbackManager([]), verbose=True)
 
 px.launch_app()
 llama_index.core.set_global_handler("arize_phoenix")
@@ -48,11 +46,13 @@ def index():
 
 @app.route("/chat", methods=["POST"])
 def chat():
-    agent.reset()
+    # agent.reset()
     for _ in range(os.getenv("RETRY_LIMIT", 3)):
         try:
-            response = agent.chat(request.form["user_input"] + "\nI only want the URL.")
-            return {"url": str(response), "json_debug": ""}
+            # response = agent.chat(request.form["user_input"])
+            response = qp.run(input={"input": request.form["user_input"], "state": {}})
+            print(response)
+            return {"url": str(response["state"]["final_url"]), "json_debug": ""}
         except Exception:
             continue
     return {"url": "", "json_debug": ""}
