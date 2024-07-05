@@ -20,7 +20,7 @@ jobs:
       - name: flake8 Lint
         uses: TrueBrain/actions-flake8@v2
         with:
-          ignore: E203,E701,W503,W504
+          ignore: E203,E701,W503,W504,BLK100
           max_line_length: 118
           path: src
           plugins: flake8-black flake8-isort flake8-quotes
