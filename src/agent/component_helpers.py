@@ -70,30 +70,24 @@ def identify_intent(input: str, state: Dict[str, Any]):
 
 def identify_attributes(input: str, state: Dict[str, Any]):
     response = requests.get(
-        "https://goat.genomehubs.org/api/v2/resultFields"
-        + f'?result={state["index"]["classification"]}'
-        + "&taxonomy=ncbi"
+        f'https://goat.genomehubs.org/api/v2/resultFields?result={state["index"]["classification"]}&taxonomy=ncbi'
     )
     response_parsed = response.json()
-    cleaned_attributes = []
-
-    for name, attribute in response_parsed["fields"].items():
-        cleaned_attributes.append(
-            {
-                "name": name,
-                "description": (
-                    attribute["description"] if "description" in attribute else None
-                ),
-                "constraint": (
-                    attribute["constraint"] if "constraint" in attribute else None
-                ),
-                "value_metadata": (
-                    attribute["value_metadata"]
-                    if "value_metadata" in attribute
-                    else None
-                ),
-            }
-        )
+    cleaned_attributes = [
+        {
+            "name": name,
+            "description": (
+                attribute["description"] if "description" in attribute else None
+            ),
+            "constraint": (
+                attribute["constraint"] if "constraint" in attribute else None
+            ),
+            "value_metadata": (
+                attribute["value_metadata"] if "value_metadata" in attribute else None
+            ),
+        }
+        for name, attribute in response_parsed["fields"].items()
+    ]
 
     attribute_response = Settings.llm.complete(
         ATTRIBUTE_PROMPT.format(
@@ -133,10 +127,10 @@ def construct_query(input: str, state: Dict[str, Any]):
 
     if state["timeframe"]["from_date"] != "" or state["timeframe"]["to_date"] != "":
         state["index"]["classification"] = "assembly"
-        if state["timeframe"]["from_date"] != "":
-            query += f"last_updated>={state['timeframe']['from_date']} AND "
-        if state["timeframe"]["to_date"] != "":
-            query += f"last_updated<={state['timeframe']['to_date']} AND "
+    if state["timeframe"]["from_date"] != "":
+        query += f"last_updated>={state['timeframe']['from_date']} AND "
+    if state["timeframe"]["to_date"] != "":
+        query += f"last_updated<={state['timeframe']['to_date']} AND "
 
     if state["attributes"]["attributes"] != []:
         for attribute in state["attributes"]["attributes"]:
@@ -160,13 +154,11 @@ def construct_query(input: str, state: Dict[str, Any]):
 def construct_url(input: str, state: Dict[str, Any]):
     base_url = "https://goat.genomehubs.org/"
     endpoint = state["intent"]["intent"] + "?"
-    suffix = (
-        f'&result={state["index"]["classification"]}'
-        + "&summaryValues=count&taxonomy=ncbi&offset=0"
-        + "&fields=assembly_level%2Cassembly_span%2Cgenome_size%2C"
-        + "chromosome_number%2Chaploid_number&names=common_name&ranks="
-        + "&includeEstimates=false&size=100"
+    suffix = f'&result={state["index"]["classification"]}&summaryValues=count&taxonomy=ncbi&offset=0'
+    suffix += (
+        "&fields=assembly_level%2Cassembly_span%2Cgenome_size%2Cchromosome_number%2C"
     )
+    suffix += "haploid_number&names=common_name&ranks=&includeEstimates=false&size=100"
 
     state["final_url"] = (
         base_url + endpoint + "query=" + urllib.parse.quote(state["query"]) + suffix
@@ -182,25 +174,20 @@ def identify_record(input: str, state: Dict[str, Any]):
         entities += f"* {entity['singular_form']},"
         entities += f"* {entity['plural_form']},"
 
-    query_url = (
-        "https://goat.genomehubs.org/api/v2/search?query="
-        + urllib.parse.quote(f"tax_name({entities})")
-        + "&result=taxon"
-    )
+    query_url = f'https://goat.genomehubs.org/api/v2/search?query={urllib.parse.quote(f"tax_name({entities})")}'
+    query_url += "&result=taxon"
 
     response = requests.get(query_url)
     response_parsed = response.json()
-    cleaned_taxons = []
-
-    for res in response_parsed["results"]:
-        cleaned_taxons.append(
-            {
-                "taxon_id": res["result"]["taxon_id"],
-                "taxon_rank": res["result"]["taxon_rank"],
-                "scientific_name": res["result"]["scientific_name"],
-                "taxon_names": res["result"]["taxon_names"],
-            }
-        )
+    cleaned_taxons = [
+        {
+            "taxon_id": res["result"]["taxon_id"],
+            "taxon_rank": res["result"]["taxon_rank"],
+            "scientific_name": res["result"]["scientific_name"],
+            "taxon_names": res["result"]["taxon_names"],
+        }
+        for res in response_parsed["results"]
+    ]
 
     taxon_response = Settings.llm.complete(
         RECORD_PROMPT.format(query=input, results=json.dumps(cleaned_taxons, indent=4))

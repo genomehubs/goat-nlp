@@ -21,7 +21,7 @@ jobs:
         uses: TrueBrain/actions-flake8@v2
         with:
           ignore: E203,E701,W503,W504
-          max_line_length: 88
+          max_line_length: 118
           path: src
           plugins: flake8-black flake8-isort flake8-quotes
           error_classes: E,H,I00,Q00
