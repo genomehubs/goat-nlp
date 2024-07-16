@@ -80,9 +80,7 @@ def attribute_api_call(index: str):
     logger.info(f"Made API call for {index} endpoint")
 
     response_parsed = response.json()
-    if response_parsed["status"]["success"]:
-        return response_parsed
-    return None
+    return response_parsed if response_parsed["status"]["success"] else None
 
 
 def identify_attributes(input: str, state: Dict[str, Any]):
@@ -133,8 +131,8 @@ def construct_query(input: str, state: Dict[str, Any]):
             try:
                 parent_taxon_id = json.loads(extract_json_str(parent_taxon_id_response))["taxon_id"]
                 state["lineage"] = parent_taxon_id_response
-            except Exception:
-                raise ValueError("Error fetching parent taxon id from lineage details from model.")
+            except Exception as e:
+                raise ValueError("Error fetching parent taxon id from lineage details from model.") from e
             query += f"tax_tree({parent_taxon_id}) AND "
         query += f"tax_rank({state['rank']['rank']}) AND "
 
@@ -205,7 +203,7 @@ def query_entity(state: Dict[str, Any], query_operator="tax_name", include_sub_s
 
     response = requests.get(query_url)
     response_parsed = response.json()
-    cleaned_taxons = [
+    return [
         {
             "taxon_id": res["result"]["taxon_id"],
             "taxon_rank": res["result"]["taxon_rank"],
@@ -217,4 +215,3 @@ def query_entity(state: Dict[str, Any], query_operator="tax_name", include_sub_s
         }
         for res in response_parsed["results"]
     ]
-    return cleaned_taxons
