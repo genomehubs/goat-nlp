@@ -56,6 +56,10 @@ An entity is a word in the query that represents the subject of the query.
 For example, in the query "How many bird species have been collected so far?",
 the entity are "bird".
 
+The identified entity *HAS TO BE* a living organism.
+
+For e.g. "genomics", "assembly", "order", etc. are NOT valid entities
+
 You need to return a list containing all the entities in the query along
 with their singular/plural forms and scientific names.
 
@@ -102,23 +106,67 @@ We want to identify the rank at which the query will be performed.
 
 A rank is the position of an entity in the taxonomic hierarchy.
 
-A rank can be one of the following:
-- kingdom
-- phylum
-- class
-- order
-- family
-- genus
-- species
+We have already queried the database against the user's query.
 
-The query given by the user is as follows:
+*Database Results:*
+`{results}`
+
+*User Query:*
 `{query}`
 
-If rank is not applicable to the query, return an empty string and an explanation.
+Look at the results and decide wisely which rank applies to the given query.
+
+You need to consider the following 3 important parameters while deciding the rank:
+1. User Query - Find the rank that is *mentioned* in the query. For example,
+    If the query is "Which species of the dog family do we know about?", the rank will be "species"
+    since it is more specific than family and is mentioned in the query.
+2. Results - The results contain all possible answers. You need to select the most relevant one from them.
+3. Lineage - The lineage of every entry in the result is an array that contains all parents of the entry.
+    Make sure that the entry that you select contains correct parents in the lineage.
+
+
+You need to return the rank and the taxon id of the most relevant entry from the results.
+
+If rank is not applicable to the query, return an empty string
+for the rank and taxon_id field.
 
 Return the rank in the following JSON format:
 {{
     "rank": "...",
+    "taxon_id": "...",
+    "explanation": "..."
+}}
+
+```json
+"""
+)
+
+LINEAGE_PROMPT = PromptTemplate(
+    """
+You are an intelligent assistant who **ONLY ANSWERS IN JSON FORMAT**.
+
+A user is trying to query a genomics database.
+
+We have already fetched results from the database for the user's query.
+
+The query given by the user is as follows:
+`{query}`
+
+The *LINEAGE* of the most relevant taxon is as follows:
+`{lineage}`
+
+You need to identify 1 entry in the lineage that should be used to answer the query.
+
+For e.g. if the user asks for all species of the cat family, the entry that you pick
+from the lineage should be "Felidae" because it corresponds to the family rank and will contain
+all the species in its descendants.
+
+Formally speaking, you need to return the taxon id of 1 entry from the lineage that will act
+as the first common ancestor of all the results that the user is looking for.
+
+Return the taxon id in the following JSON format:
+{{
+    "taxon_id": "...",
     "explanation": "..."
 }}
 
@@ -200,7 +248,7 @@ or they might simply be a "required" field in the output.
 
 The list of possible attributes and their types/values are as follows:
 
-{attribute_metadata}
+`{attribute_metadata}`
 
 The query given by the user is as follows:
 `{query}`
@@ -227,7 +275,7 @@ If there are no attributes in the query, return an empty list.
 
 
 **REMEMBER:** The attributes list in your response must be filled **ONLY** if
-the user has explicitly mentioned that attribute in the query.
+the user has **explicitly** mentioned that attribute in the query.
 
 This means that "ebp_date" (or any other attribute) will not be included in
 the list unless the phrase "ebp_date" is given in the query by the user.

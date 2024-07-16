@@ -31,11 +31,11 @@ LlamaIndexInstrumentor().instrument(tracer_provider=tracer_provider)
 app = Flask("goat_nlp")
 
 handler = logging.StreamHandler(sys.stdout)
-handler.setFormatter(
-    logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-)
+handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
 app.logger.addHandler(handler)
 app.logger.setLevel(logging.INFO)
+
+logger = logging.getLogger("goat_nlp.app")
 
 
 @app.route("/")
@@ -50,7 +50,7 @@ def chat():
         try:
             # response = agent.chat(request.form["user_input"])
             response = qp.run(input={"input": request.form["user_input"], "state": {}})
-            print(response)
+            logger.info(response)
             return {"url": str(response["state"]["final_url"]), "json_debug": ""}
         except Exception:
             continue
