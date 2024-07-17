@@ -171,6 +171,9 @@ def construct_url(input: str, state: Dict[str, Any]):
 def identify_record(input: str, state: Dict[str, Any]):
     cleaned_taxons = query_entity(state)
 
+    for taxon in cleaned_taxons:
+        taxon.pop("lineage", None)
+
     taxon_response = Settings.llm.complete(
         RECORD_PROMPT.format(query=input, results=json.dumps(cleaned_taxons, indent=4))
     ).text

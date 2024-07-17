@@ -297,6 +297,8 @@ We have already queried the database against the user's query.
 
 We have a set of results from the database, we need to pick the best match.
 
+Make sure that the "rank" of your answer should be the closest match to the user's query.
+
 The query by the user is as follows:
 `{query}`
 
