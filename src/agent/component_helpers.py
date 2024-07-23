@@ -161,10 +161,11 @@ def construct_query(input: str, state: Dict[str, Any]):
 def construct_url(input: str, state: Dict[str, Any]):
     base_url = "https://goat.genomehubs.org/"
     endpoint = state["intent"]["intent"] + "?"
-    suffix = f'&result={state["index"]["classification"]}&summaryValues=count&taxonomy=ncbi&offset=0'
-    suffix += "&fields=assembly_level%2Cassembly_span%2Cgenome_size%2Cchromosome_number%2C"
-    suffix += "haploid_number&names=common_name&ranks=&includeEstimates=false&size=100"
-
+    if fields := "%2C".join(state.get("attributes", {}).get("attribute", [])):
+        fields = f"&fields={fields}"
+    include_estimates = str(not state["rank"]["rank"].endswith("species")).lower()
+    suffix = f'&result={state["index"]["classification"]}&taxonomy=ncbi'
+    suffix += f"{fields}&names=common_name&ranks=&includeEstimates={include_estimates}&size=10"
     state["final_url"] = base_url + endpoint + "query=" + urllib.parse.quote(state["query"]) + suffix
 
 

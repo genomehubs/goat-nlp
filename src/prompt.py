@@ -15,6 +15,7 @@ There are 3 indices: **taxon**, **assembly**, and **sample**.
 Queries related to **taxon** appear as follows:
 1. How many bird species have been collected so far?
 2. What mushroom species have RNA seq?
+3. What is the distribution of assembly span values across the phylum Chordata?
 
 Queries related to **assembly** appear as follows:
 1. What are the latest assemblies for the family Canidae?
@@ -23,6 +24,9 @@ Queries related to **assembly** appear as follows:
 Queries related to **sample** appear as follows:
 1. Find samples with RNA-seq data for tigers
 2. Do any samples for cattle include RNA-seq data?
+
+A query looking for values across a taxonomic group that does not mention "assemblies" is most likely to be related
+to the taxon index.
 
 Classify the following query into one of the three types:
 `{query}`
@@ -49,18 +53,28 @@ You are an intelligent assistant who **ONLY ANSWERS IN JSON FORMAT**.
 
 A user is trying to query a genomics database.
 
-We want to identify all the entities in the query.
+We want to identify all the taxa in the query.
 
-An entity is a word in the query that represents the subject of the query.
+A taxon is a living organism present as the subject of the query.
 
-For example, in the query "How many bird species have been collected so far?",
-the entity are "bird".
+For example:
+- in the query "How many bird species have been collected so far?", the taxon is "bird".
+- in the query "give me a tree of ant families", the taxon is "ant".
+- in the query "show me the genome sizes for all species of elephant, cat and yeast?",
+  there are 3 taxa, "elephant, cat, and yeast".
 
-The identified entity *HAS TO BE* a living organism.
+The query may refer to a subset of a larger group of organisms, for example in
+the query "What are the latest assemblies for the bivalve molluscs?", the taxon
+is Bivalvia and **NOT** Mollusca.
 
-For e.g. "genomics", "assembly", "order", etc. are NOT valid entities
+These queries have no taxa:
+- "what is the distribution of genome sizes across all classes?"
+- "How many samples are there in total?"
 
-You need to return a list containing all the entities in the query along
+The identified taxa *HAVE TO BE* living organisms but should not be a group of
+organisms based on taxonomic rank alone.
+
+You need to return a list containing all the taxa in the query along
 with their singular/plural forms and scientific names.
 
 For example, for the query "How many bird species have been collected so far?",
@@ -75,12 +89,12 @@ the output would be:
 ]
 ```
 
+If taxa is not applicable to the query, return an empty list.
+
 The query given by the user is as follows:
 `{query}`
 
-If there are no entities in the query, return an empty list.
-
-Return the entities in the following JSON format:
+Return the taxa as a list of entities in the following JSON format:
 {{
     "entities": [
         {{
@@ -213,14 +227,27 @@ A user is trying to query a genomics database.
 We need to identify the intent of the query.
 
 An intent can be one of the following three types:
-- **search**: The user is looking for information.
+- **search**: The user is looking for a table of values.
 - **count**: The user is looking for a count of something.
-- **record**: The user is looking for a specific record.
+- **record**: The user is looking for a specific taxon, assembly or sample record.
+- **tree**: The user is looking for a phylogenetic tree.
+- **histogram**: The user is looking for a histogram chart showing the distribution of a **SINGLE** attribute.
+- **scatter**: The user is looking for a scatter plot chart showing the distribution of a pair of attributes.
 
 Examples for each intent:
 - search: "What are the latest assemblies for the family Canidae?"
+- search: "What are the gene counts for squirrel and mouse assemblies?
+- search: "What are the assembly span values for pine and spruce assemblies?
 - count: "How many bird species have been collected so far?"
 - record: "What information do we have about the African Elephant?"
+- tree: "Show me a tree of all families in the phylum chordata"
+- histogram: "What is the distribution of assembly span for species in the cat family?"
+- scatter: "What is the relationship between contig scaffold n50 for all domestic dog assemblies"
+
+**REMEMBER:**
+- A user only ants a distribution of values if they use the word "distribution" or "histogram" in their query.
+- A user is more likely to want a scatter plot than a histogram if the query refers to a relationship
+  between attributes.
 
 The query given by the user is as follows:
 `{query}`
