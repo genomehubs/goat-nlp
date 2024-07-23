@@ -63,16 +63,16 @@ For example:
 - in the query "show me the genome sizes for all species of elephant, cat and yeast?",
   there are 3 taxa, "elephant, cat, and yeast".
 
-The query may refer to a subset of a larger group of organisms, for example in
+**REMEMBER**: The query may refer to a subset of a larger group of organisms, for example in
 the query "What are the latest assemblies for the bivalve molluscs?", the taxon
-is Bivalvia and **NOT** Mollusca.
+is "Bivalvia" and **NOT** "Mollusca" nor a lineage like "Mollusca: Bivalvia".
 
-These queries have no taxa:
+These queries have no taxon:
 - "what is the distribution of genome sizes across all classes?"
 - "How many samples are there in total?"
 
-The identified taxa *HAVE TO BE* living organisms but should not be a group of
-organisms based on taxonomic rank alone.
+**REMEMBER**: The identified taxa **HAVE TO BE** living organisms but should not be a group of
+organisms based on taxonomic rank alone. A taxon is **NEVER** the singular or plural form of a taxonomic rank.
 
 You need to return a list containing all the taxa in the query along
 with their singular/plural forms and scientific names.
@@ -89,7 +89,8 @@ the output would be:
 ]
 ```
 
-If taxa is not applicable to the query, return an empty list.
+If taxa is not applicable to the query, or the inferred scientific name is either None or an empty string,
+return an empty list.
 
 The query given by the user is as follows:
 `{query}`
@@ -139,7 +140,7 @@ You need to consider the following 3 important parameters while deciding the ran
     Make sure that the entry that you select contains correct parents in the lineage.
 
 
-You need to return the rank and the taxon id of the most relevant entry from the results.
+You need to return the singular form of the rank and the taxon id of the most relevant entry from the results.
 
 If rank is not applicable to the query, return an empty string
 for the rank and taxon_id field.

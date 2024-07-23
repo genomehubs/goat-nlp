@@ -73,6 +73,11 @@ QUERIES = [
      "search",
      [],
      None),
+    ("how does assembly span vary with genome size across all phyla?",
+     "taxon",
+     "scatter",
+     [],
+     "phylum"),
 ]
 
 
