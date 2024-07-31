@@ -40,20 +40,25 @@
 
         details details {
             margin-left: 20px;
+            transition: all 1500ms ease-in-out;
+        }
+
+        details pre {
+            margin-left: 20px;
+            background: rgb(179, 179, 179);
+            padding: 10px;
+            transition: all 1500ms ease-in-out;
         }
 
         details {
             background: gainsboro;
-            padding: 10px;
+            padding: 2px;
         }
 
         details summary {
             cursor: pointer;
-            transition: all 150ms ease-in-out;
-        }
-
-        details[open] summary {
-            margin-bottom: 5px;
+            transition: all 1500ms ease-in-out;
+            /* list-style-type: ''; */
         }
 
         pre {
@@ -198,6 +203,7 @@
                 $.ajax({
                     type: 'POST',
                     url: '/chat',
+                    // url: '/chatDebug',
                     data: { user_input: message },
                     success: function (response) {
                         $('.bot-message').last().remove();
