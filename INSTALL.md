@@ -63,6 +63,7 @@ Set the necessary environment variables and start the Flask application:
 export OLLAMA_HOST_URL=http://127.0.0.1:11434
 export RETRY_COUNT=5
 export GOAT_BASE_URL=https://goat.genomehubs.org/api/v2
+export ATTRIBUTE_API_TTL=172800
 python -m flask run
 ```
 
