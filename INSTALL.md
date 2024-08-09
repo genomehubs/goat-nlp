@@ -1,4 +1,3 @@
-
 # Installation Guide
 
 This guide provides step-by-step instructions to set up the project after cloning the repository.
@@ -69,3 +68,21 @@ python -m flask run
 
 The UI will be available at `http://localhost:5000/`
 
+# Testing guide
+
+Install dev dependencies
+
+```
+pip install -r requirements-dev.txt
+```
+
+Run `pytest`
+
+```
+export OLLAMA_HOST_URL=http://127.0.0.1:11434
+export RETRY_COUNT=5
+export GOAT_BASE_URL=https://goat.genomehubs.org/api/v2
+export ATTRIBUTE_API_TTL=172800
+
+pytest -W ignore::DeprecationWarning -k test_intent_module
+```

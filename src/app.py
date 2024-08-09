@@ -15,7 +15,7 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from agent.query_pipeline import qp
 
 Settings.llm = Ollama(
-    model="llama3",
+    model="llama3.1",
     base_url=os.getenv("OLLAMA_HOST_URL", "http://127.0.0.1:11434"),
     request_timeout=36000.0,
 )
@@ -51,7 +51,7 @@ def chat():
             # response = agent.chat(request.form["user_input"])
             response = qp.run(input={"input": request.form["user_input"], "state": {}})
             logger.info(response)
-            return {"url": str(response["state"]["final_url"]), "json_debug": ""}
+            return {"url": str(response["state"]["final_url"]), "json_debug": response["state"]}
         except Exception:
             continue
     return {"url": "", "json_debug": ""}
