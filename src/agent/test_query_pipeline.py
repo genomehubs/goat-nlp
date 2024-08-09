@@ -1,7 +1,7 @@
 import os
 
-from dotenv import load_dotenv
 import pytest
+from dotenv import load_dotenv
 from llama_index.core import Settings, set_global_handler
 from llama_index.core.query_pipeline import QueryPipeline as QP
 from llama_index.llms.ollama import Ollama
