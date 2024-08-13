@@ -89,9 +89,9 @@ def identify_attributes(input: str, state: Dict[str, Any]):
     cleaned_attributes = [
         {
             "name": name,
-            "description": (attribute["description"] if "description" in attribute else None),
+            "description": (attribute["long_description"] if "long_description" in attribute else None),
             "constraint": (attribute["constraint"] if "constraint" in attribute else None),
-            "value_metadata": (attribute["value_metadata"] if "value_metadata" in attribute else None),
+            # "value_metadata": (attribute["value_metadata"] if "value_metadata" in attribute else None),
         }
         for name, attribute in attributes["fields"].items()
     ]
