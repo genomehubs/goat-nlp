@@ -94,6 +94,7 @@ def identify_attributes(input: str, state: Dict[str, Any]):
             # "value_metadata": (attribute["value_metadata"] if "value_metadata" in attribute else None),
         }
         for name, attribute in attributes["fields"].items()
+        if "long_description" in attribute
     ]
 
     attribute_response = Settings.llm.complete(

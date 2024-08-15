@@ -129,6 +129,8 @@ We have already queried the database against the user's query.
 *User Query:*
 `{query}`
 
+*Task:*
+
 Look at the results and decide wisely which rank applies to the given query.
 
 You need to consider the following 3 important parameters while deciding the rank:
@@ -137,7 +139,7 @@ You need to consider the following 3 important parameters while deciding the ran
     since it is more specific than family and is mentioned in the query.
 2. Results - The results contain all possible answers. You need to select the most relevant one from them.
 3. Lineage - The lineage of every entry in the result is an array that contains all parents of the entry.
-    Make sure that the entry that you select contains correct parents in the lineage.
+    Make sure that the entry that you select an entry that contains correct parents in the lineage.
 
 
 You need to return the singular form of the rank and the taxon id of the most relevant entry from the results.
@@ -145,7 +147,9 @@ You need to return the singular form of the rank and the taxon id of the most re
 If rank is not applicable to the query, return an empty string
 for the rank and taxon_id field.
 
-Return the rank in the following JSON format:
+*IMPORTANT:*
+We do not want a programmatic answer, we only need the rank and the taxon id.
+Do not give me python code, your response should simply be a JSON of the following format:
 {{
     "rank": "...",
     "taxon_id": "...",
@@ -289,6 +293,7 @@ The conditions can be one of the following:
 If the condition is "in", the value will be a list of values.
 You need to reply in the following format:
 {{
+    "attribute_required": "true/false",
     "attributes": [
         {{
             "attribute": "...",
@@ -302,7 +307,8 @@ You need to reply in the following format:
 If there are no attributes in the query, return an empty list.
 
 
-**REMEMBER:** The attributes list in your response must be filled **ONLY** if
+**REMEMBER:**
+The attributes list in your response must be filled **ONLY** if
 the user has **explicitly** mentioned that attribute in the query.
 
 This means that "ebp_date" (or any other attribute) will not be included in
