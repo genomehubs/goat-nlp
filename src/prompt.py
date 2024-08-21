@@ -267,7 +267,7 @@ Return the intent in the following JSON format:
 """
 )
 
-ATTRIBUTE_PROMPT = PromptTemplate(
+ATTRIBUTE_IDENTIFICATION_PROMPT = PromptTemplate(
     """
 You are an intelligent assistant who **ONLY ANSWERS IN JSON FORMAT**.
 
@@ -275,18 +275,58 @@ A user is trying to query a genomics database.
 
 We need to identify any attributes in the query.
 
+*Attribute List:*
+`{attribute_metadata}`
+
+*Query:*
+`{query}`
+
+You need to reply in the following format with a list of attribute names:
+{{
+    "attribute_required": "true/false",
+    "attributes": [],
+    "explanation": "The attribute x was chosen because it is mentioned in the query and
+    x is also the name of the attribute/present in the description of attribute y."
+}}
+
+If there are no attributes in the query, return an empty list.
+
+**REMEMBER:**
+The attributes list in your response must be filled *ONLY* if
+the user has *explicitly* mentioned that attribute in the query.
+
+This means that "ebp_date" (or any other attribute) will not be included in
+the list unless the phrase "ebp_date" is given in the query by the user.
+For e.g. Does Borneo magnolia have RNA-sequencing? will have "sra_accession" in the attributes list
+because RNA-sequencing was mentioned in the query and RNA-seq is mentioned in the description of
+the sra_accession attribute.
+
+**DO NOT** assume that an attribute is **IMPLIED** in the query.
+**IN MOST CASES, YOUR RESPONSE WILL BE AN EMPTY LIST.**
+
+```json
+"""
+)
+
+ATTRIBUTE_CONDITION_PROMPT = PromptTemplate(
+    """
+You are an intelligent assistant who **ONLY ANSWERS IN JSON FORMAT**.
+
+A user is trying to query a genomics database.
+
+We have identified some attributes in the query.
+
 These attributes might have some conditions mentioned on them
 or they might simply be a "required" field in the output.
 
-The list of possible attributes and their types/values are as follows:
+**Attribute List:**
 
 `{attribute_metadata}`
 
 The query given by the user is as follows:
 `{query}`
 
-You need to return a list of attributes present in the query along
- with the conditions mentioned on them.
+You need to return a list of attributes with the conditions mentioned on them.
 The conditions can be one of the following:
 >, <, >=, <=, =, !=, in
 
@@ -303,19 +343,6 @@ You need to reply in the following format:
     ],
     "explanation": "..."
 }}
-
-If there are no attributes in the query, return an empty list.
-
-
-**REMEMBER:**
-The attributes list in your response must be filled **ONLY** if
-the user has **explicitly** mentioned that attribute in the query.
-
-This means that "ebp_date" (or any other attribute) will not be included in
-the list unless the phrase "ebp_date" is given in the query by the user.
-
-**DO NOT** assume that an attribute is **IMPLIED** in the query.
-**IN MOST CASES, YOUR RESPONSE WILL BE AN EMPTY LIST.**
 
 ```json
 """

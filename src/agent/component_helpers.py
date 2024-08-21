@@ -11,7 +11,8 @@ from llama_index.core import Settings
 from llama_index.core.output_parsers.utils import extract_json_str
 
 from prompt import (
-    ATTRIBUTE_PROMPT,
+    ATTRIBUTE_IDENTIFICATION_PROMPT,
+    ATTRIBUTE_CONDITION_PROMPT,
     ENTITY_PROMPT,
     INDEX_PROMPT,
     INTENT_PROMPT,
@@ -83,6 +84,36 @@ def attribute_api_call(index: str):
     return response_parsed if response_parsed["status"]["success"] else None
 
 
+def define_attribute_condition(input: str, state: Dict[str, Any]):
+    attributes = attribute_api_call(state["index"]["classification"])
+
+    if state["attribute_identification"]["attributes"] == []:
+        state["attributes"] = {"attributes": [], "explanation": "No attributes identified."}
+        return
+
+    cleaned_attributes = [
+        {
+            "name": name,
+            # "description": (attribute["long_description"] if "long_description" in attribute else None),
+            "constraint": (attribute["constraint"] if "constraint" in attribute else None),
+            # "value_metadata": (attribute["value_metadata"] if "value_metadata" in attribute else None),
+        }
+        for name, attribute in attributes["fields"].items()
+        if "long_description" in attribute and name in state["attribute_identification"]["attributes"]
+    ]
+
+    attribute_response = Settings.llm.complete(
+        ATTRIBUTE_CONDITION_PROMPT.format(
+            attribute_metadata=json.dumps(cleaned_attributes, indent=4),
+            query=input,
+        )
+    ).text
+    state["attributes"] = json.loads(extract_json_str(attribute_response))
+
+    if "attributes" not in state["attributes"] or "explanation" not in state["attributes"]:
+        raise ValueError("Invalid response from model at attribute identification stage.")
+
+
 def identify_attributes(input: str, state: Dict[str, Any]):
 
     attributes = attribute_api_call(state["index"]["classification"])
@@ -90,7 +121,7 @@ def identify_attributes(input: str, state: Dict[str, Any]):
         {
             "name": name,
             "description": (attribute["long_description"] if "long_description" in attribute else None),
-            "constraint": (attribute["constraint"] if "constraint" in attribute else None),
+            # "constraint": (attribute["constraint"] if "constraint" in attribute else None),
             # "value_metadata": (attribute["value_metadata"] if "value_metadata" in attribute else None),
         }
         for name, attribute in attributes["fields"].items()
@@ -98,12 +129,12 @@ def identify_attributes(input: str, state: Dict[str, Any]):
     ]
 
     attribute_response = Settings.llm.complete(
-        ATTRIBUTE_PROMPT.format(
+        ATTRIBUTE_IDENTIFICATION_PROMPT.format(
             attribute_metadata=json.dumps(cleaned_attributes, indent=4),
             query=input,
         )
     ).text
-    state["attributes"] = json.loads(extract_json_str(attribute_response))
+    state["attribute_identification"] = json.loads(extract_json_str(attribute_response))
 
     if "attributes" not in state["attributes"] or "explanation" not in state["attributes"]:
         raise ValueError("Invalid response from model at attribute identification stage.")
