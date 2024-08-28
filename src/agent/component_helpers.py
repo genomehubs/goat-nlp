@@ -94,12 +94,10 @@ def define_attribute_condition(input: str, state: Dict[str, Any]):
     cleaned_attributes = [
         {
             "name": name,
-            # "description": (attribute["long_description"] if "long_description" in attribute else None),
             "constraint": (attribute["constraint"] if "constraint" in attribute else None),
-            # "value_metadata": (attribute["value_metadata"] if "value_metadata" in attribute else None),
         }
         for name, attribute in attributes["fields"].items()
-        if "long_description" in attribute and name in state["attribute_identification"]["attributes"]
+        if name in state["attribute_identification"]["attributes"]
     ]
 
     attribute_response = Settings.llm.complete(
@@ -117,16 +115,20 @@ def define_attribute_condition(input: str, state: Dict[str, Any]):
 def identify_attributes(input: str, state: Dict[str, Any]):
 
     attributes = attribute_api_call(state["index"]["classification"])
-    cleaned_attributes = [
-        {
-            "name": name,
-            "description": (attribute["long_description"] if "long_description" in attribute else None),
-            # "constraint": (attribute["constraint"] if "constraint" in attribute else None),
-            # "value_metadata": (attribute["value_metadata"] if "value_metadata" in attribute else None),
-        }
-        for name, attribute in attributes["fields"].items()
-        if "long_description" in attribute
-    ]
+
+    cleaned_attributes = []
+
+    for name, attribute in attributes["fields"].items():
+        cleaned_attribute = {"name": name}
+        description_added = False
+        if "description" in attribute:
+            cleaned_attribute["description"] = attribute["description"]
+            description_added = True
+        if "long_description" in attribute:
+            cleaned_attribute["long_description"] = attribute["long_description"]
+            description_added = True
+        if description_added:
+            cleaned_attributes.append(cleaned_attribute)
 
     attribute_response = Settings.llm.complete(
         ATTRIBUTE_IDENTIFICATION_PROMPT.format(
@@ -182,6 +184,8 @@ def construct_query(input: str, state: Dict[str, Any]):
             condition = attribute["condition"]
             if condition == "in":
                 query += f'{attribute["attribute"]}({",".join(attribute["value"])}) AND '
+            elif condition == "required":
+                query += f'{attribute["attribute"]} AND '
             else:
                 query += f'{attribute["attribute"]}' + f'{attribute["condition"]}' + f'{attribute["value"]} AND '
 
@@ -234,8 +238,12 @@ def query_entity(state: Dict[str, Any], query_operator="tax_name", include_sub_s
             entities += f"* {entity['singular_form']},"
             entities += f"* {entity['plural_form']},"
 
-    query_url = f'{os.getenv("GOAT_BASE_URL")}/search?query={urllib.parse.quote(f"{query_operator}({entities})")}'
+    query_url = (
+        f'{os.getenv("GOAT_BASE_URL")}/search?query={urllib.parse.quote(f"{query_operator}({entities})")}&size=50'
+    )
     query_url += f"&result={state['index']['classification']}"
+
+    state["entity"]["query_url"] = query_url
 
     response = requests.get(query_url)
     response_parsed = response.json()

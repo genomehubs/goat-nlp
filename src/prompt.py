@@ -234,7 +234,7 @@ We need to identify the intent of the query.
 An intent can be one of the following three types:
 - **search**: The user is looking for a table of values.
 - **count**: The user is looking for a count of something.
-- **record**: The user is looking for a specific taxon, assembly or sample record.
+- **record**: The user is looking for a specific taxon, assembly or sample record without any condition or constraints.
 - **tree**: The user is looking for a phylogenetic tree.
 - **histogram**: The user is looking for a histogram chart showing the distribution of a **SINGLE** attribute.
 - **scatter**: The user is looking for a scatter plot chart showing the distribution of a pair of attributes.
@@ -250,9 +250,13 @@ Examples for each intent:
 - scatter: "What is the relationship between contig scaffold n50 for all domestic dog assemblies"
 
 **REMEMBER:**
-- A user only ants a distribution of values if they use the word "distribution" or "histogram" in their query.
+- A user only wants a distribution of values if they use the word "distribution" or "histogram" in their query.
 - A user is more likely to want a scatter plot than a histogram if the query refers to a relationship
   between attributes.
+- The record endpoint is used only when there are no conditions or if the user has NOT asked a specific question.
+    If the question is generic like "give me info about", "what do we know about", etc., then the intent is record.
+- Even if the query mentions a specific taxon, it can have constraints or conditions on it, DO NOT
+    use the record intent in such cases.
 
 The query given by the user is as follows:
 `{query}`
@@ -283,7 +287,6 @@ We need to identify any attributes in the query.
 
 You need to reply in the following format with a list of attribute names:
 {{
-    "attribute_required": "true/false",
     "attributes": [],
     "explanation": "The attribute x was chosen because it is mentioned in the query and
     x is also the name of the attribute/present in the description of attribute y."
@@ -304,7 +307,6 @@ the sra_accession attribute.
 **DO NOT** assume that an attribute is **IMPLIED** in the query.
 **IN MOST CASES, YOUR RESPONSE WILL BE AN EMPTY LIST.**
 
-```json
 """
 )
 
@@ -314,26 +316,23 @@ You are an intelligent assistant who **ONLY ANSWERS IN JSON FORMAT**.
 
 A user is trying to query a genomics database.
 
-We have identified some attributes in the query.
-
-These attributes might have some conditions mentioned on them
+We have identified some attributes in the query which might have specific conditions mentioned on them
 or they might simply be a "required" field in the output.
 
-**Attribute List:**
-
+**Attribute List which needs to be filled with conditions:**
 `{attribute_metadata}`
 
 The query given by the user is as follows:
 `{query}`
 
-You need to return a list of attributes with the conditions mentioned on them.
+Your task is to return the above list of attributes and fill each attribute with conditions.
 The conditions can be one of the following:
->, <, >=, <=, =, !=, in
+>, <, >=, <=, =, !=, in, required
 
 If the condition is "in", the value will be a list of values.
+If the condition is "required", the value will be null, we just want the attribute to be "present" in the results.
 You need to reply in the following format:
 {{
-    "attribute_required": "true/false",
     "attributes": [
         {{
             "attribute": "...",
@@ -341,10 +340,13 @@ You need to reply in the following format:
             "value": "..." or ["...", "..."]
         }}
     ],
-    "explanation": "..."
+    "explanation": "why the condition was added..."
 }}
 
-```json
+*REMEMBER:*
+The result should contain ONLY attributes from the list given above, DO NOT add extra attributes.
+DO NOT omit any attributes from the list.
+
 """
 )
 
@@ -360,13 +362,15 @@ We have a set of results from the database, we need to pick the best match.
 
 Make sure that the "rank" of your answer should be the closest match to the user's query.
 
-The query by the user is as follows:
-`{query}`
-
 The results from the database are as follows:
 {results}
 
-You need to return the best taxon from the results in the following JSON format:
+The query by the user is as follows:
+`{query}`
+
+*IMPORTANT:*
+We do not want a programmatic answer, we only need the best matching taxon id which has the closest "rank" to the query.
+Do not give me python code, your response should simply be a JSON of the following format:
 {{
     "taxon_id": "...",
     "explanation": "..."
