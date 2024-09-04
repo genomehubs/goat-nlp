@@ -11,7 +11,8 @@ from llama_index.core import Settings
 from llama_index.core.output_parsers.utils import extract_json_str
 
 from prompt import (
-    ATTRIBUTE_PROMPT,
+    ATTRIBUTE_IDENTIFICATION_PROMPT,
+    ATTRIBUTE_CONDITION_PROMPT,
     ENTITY_PROMPT,
     INDEX_PROMPT,
     INTENT_PROMPT,
@@ -83,26 +84,59 @@ def attribute_api_call(index: str):
     return response_parsed if response_parsed["status"]["success"] else None
 
 
-def identify_attributes(input: str, state: Dict[str, Any]):
-
+def define_attribute_condition(input: str, state: Dict[str, Any]):
     attributes = attribute_api_call(state["index"]["classification"])
+
+    if state["attribute_identification"]["attributes"] == []:
+        state["attributes"] = {"attributes": [], "explanation": "No attributes identified."}
+        return
+
     cleaned_attributes = [
         {
             "name": name,
-            "description": (attribute["description"] if "description" in attribute else None),
             "constraint": (attribute["constraint"] if "constraint" in attribute else None),
-            "value_metadata": (attribute["value_metadata"] if "value_metadata" in attribute else None),
         }
         for name, attribute in attributes["fields"].items()
+        if name in state["attribute_identification"]["attributes"]
     ]
 
     attribute_response = Settings.llm.complete(
-        ATTRIBUTE_PROMPT.format(
+        ATTRIBUTE_CONDITION_PROMPT.format(
             attribute_metadata=json.dumps(cleaned_attributes, indent=4),
             query=input,
         )
     ).text
     state["attributes"] = json.loads(extract_json_str(attribute_response))
+
+    if "attributes" not in state["attributes"] or "explanation" not in state["attributes"]:
+        raise ValueError("Invalid response from model at attribute identification stage.")
+
+
+def identify_attributes(input: str, state: Dict[str, Any]):
+
+    attributes = attribute_api_call(state["index"]["classification"])
+
+    cleaned_attributes = []
+
+    for name, attribute in attributes["fields"].items():
+        cleaned_attribute = {"name": name}
+        description_added = False
+        if "description" in attribute:
+            cleaned_attribute["description"] = attribute["description"]
+            description_added = True
+        if "long_description" in attribute:
+            cleaned_attribute["long_description"] = attribute["long_description"]
+            description_added = True
+        if description_added:
+            cleaned_attributes.append(cleaned_attribute)
+
+    attribute_response = Settings.llm.complete(
+        ATTRIBUTE_IDENTIFICATION_PROMPT.format(
+            attribute_metadata=json.dumps(cleaned_attributes, indent=4),
+            query=input,
+        )
+    ).text
+    state["attribute_identification"] = json.loads(extract_json_str(attribute_response))
 
     if "attributes" not in state["attributes"] or "explanation" not in state["attributes"]:
         raise ValueError("Invalid response from model at attribute identification stage.")
@@ -150,6 +184,8 @@ def construct_query(input: str, state: Dict[str, Any]):
             condition = attribute["condition"]
             if condition == "in":
                 query += f'{attribute["attribute"]}({",".join(attribute["value"])}) AND '
+            elif condition == "required":
+                query += f'{attribute["attribute"]} AND '
             else:
                 query += f'{attribute["attribute"]}' + f'{attribute["condition"]}' + f'{attribute["value"]} AND '
 
@@ -161,10 +197,11 @@ def construct_query(input: str, state: Dict[str, Any]):
 def construct_url(input: str, state: Dict[str, Any]):
     base_url = "https://goat.genomehubs.org/"
     endpoint = state["intent"]["intent"] + "?"
-    suffix = f'&result={state["index"]["classification"]}&summaryValues=count&taxonomy=ncbi&offset=0'
-    suffix += "&fields=assembly_level%2Cassembly_span%2Cgenome_size%2Cchromosome_number%2C"
-    suffix += "haploid_number&names=common_name&ranks=&includeEstimates=false&size=100"
-
+    if fields := "%2C".join(state.get("attributes", {}).get("attribute", [])):
+        fields = f"&fields={fields}"
+    include_estimates = str(not state["rank"]["rank"].endswith("species")).lower()
+    suffix = f'&result={state["index"]["classification"]}&taxonomy=ncbi'
+    suffix += f"{fields}&names=common_name&ranks=&includeEstimates={include_estimates}&size=10"
     state["final_url"] = base_url + endpoint + "query=" + urllib.parse.quote(state["query"]) + suffix
 
 
@@ -201,8 +238,12 @@ def query_entity(state: Dict[str, Any], query_operator="tax_name", include_sub_s
             entities += f"* {entity['singular_form']},"
             entities += f"* {entity['plural_form']},"
 
-    query_url = f'{os.getenv("GOAT_BASE_URL")}/search?query={urllib.parse.quote(f"{query_operator}({entities})")}'
+    query_url = (
+        f'{os.getenv("GOAT_BASE_URL")}/search?query={urllib.parse.quote(f"{query_operator}({entities})")}&size=50'
+    )
     query_url += f"&result={state['index']['classification']}"
+
+    state["entity"]["query_url"] = query_url
 
     response = requests.get(query_url)
     response_parsed = response.json()

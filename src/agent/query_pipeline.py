@@ -4,6 +4,7 @@ from agent.component_helpers import (
     construct_query,
     construct_url,
     identify_attributes,
+    define_attribute_condition,
     identify_entity,
     identify_index,
     identify_intent,
@@ -21,7 +22,8 @@ qp.add_modules(
         "entity": GoatQueryComponent(fn=identify_entity),
         "rank": GoatQueryComponent(fn=identify_rank),
         "intent": GoatQueryComponent(fn=identify_intent),
-        "attribute": GoatQueryComponent(fn=identify_attributes),
+        "attribute": GoatQueryComponent(fn=define_attribute_condition),
+        "attribute_identification": GoatQueryComponent(fn=identify_attributes),
         "time": GoatQueryComponent(fn=identify_time_frame),
         "query": GoatQueryComponent(fn=construct_query),
         "url": GoatQueryComponent(fn=construct_url),
@@ -37,8 +39,6 @@ qp.add_link(
     "record",
     condition_fn=lambda x: x["state"]["intent"]["intent"] == "record",
 )
-qp.add_link(
-    "entity", "rank", condition_fn=lambda x: x["state"]["intent"]["intent"] != "record"
-)
-qp.add_chain(["rank", "attribute", "time", "query", "url"])
+qp.add_link("entity", "rank", condition_fn=lambda x: x["state"]["intent"]["intent"] != "record")
+qp.add_chain(["rank", "attribute_identification", "attribute", "time", "query", "url"])
 # qp.add_chain(["intent", "index", "entity", "rank", "time", "query", "url"])
