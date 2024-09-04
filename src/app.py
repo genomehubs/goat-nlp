@@ -15,7 +15,7 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from agent.query_pipeline import qp
 
 Settings.llm = Ollama(
-    model="llama3.1",
+    model="llama3.1:8b-instruct-q4_0",
     base_url=os.getenv("OLLAMA_HOST_URL", "http://127.0.0.1:11434"),
     request_timeout=36000.0,
 )

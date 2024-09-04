@@ -37,13 +37,12 @@ Return the classification in the following JSON format:
 "explanation": "..."
 }}
 
+*REMEMBER*
 The classification key in your response SHOULD HAVE ONLY ONE OF THE THREE VALUES.
 You CANNOT reply with a combination of any values.
 e.g. "classification": "taxon, assembly", "classification": "taxon/assembly" etc.
 IS NOT ALLOWED.
-
-```json
-
+If the word "assemblies" is mentioned in the query, most likely the classification will be assembly.
 """
 )
 
@@ -214,12 +213,11 @@ The JSON has to be in the following format:
     "explanation": "..."
 }}
 
-If there is no time related information in the query, return an empty string
-for both from_date and to_date.
-If 'from' is not applicable, return an empty string for from_date.
-If 'to' is not applicable, return an empty string for to_date.
-
-```json
+*REMEMBER:*
+- If there is no time related information in the query, return an empty string
+    for both from_date and to_date.
+- If 'from' is not applicable, return an empty string for from_date.
+- If 'to' is not applicable, return an empty string for to_date.
 """
 )
 
@@ -287,7 +285,7 @@ We need to identify any attributes in the query.
 
 You need to reply in the following format with a list of attribute names:
 {{
-    "attributes": [],
+    "attributes": ["", "", ...],
     "explanation": "The attribute x was chosen because it is mentioned in the query and
     x is also the name of the attribute/present in the description of attribute y."
 }}
@@ -336,16 +334,35 @@ You need to reply in the following format:
     "attributes": [
         {{
             "attribute": "...",
-            "condition": "...",
-            "value": "..." or ["...", "..."]
+            "condition": "required",
+            "value": "..." or ["...", "..."] or null
         }}
     ],
     "explanation": "why the condition was added..."
 }}
 
+e.g.
+query: "What is the contig N50 value for the family Canidae?"
+attributes: ["contig_n50"]
+
+response - 
+```json
+{
+    "attributes": [
+        {
+            "attribute": "contig_n50",
+            "condition": "required",
+            "value": null
+        }
+    ],
+    "explanation": "The contig N50 value is required in the output."
+}
+```
+
 *REMEMBER:*
 The result should contain ONLY attributes from the list given above, DO NOT add extra attributes.
 DO NOT omit any attributes from the list.
+In most cases, the condition will be "required".
 
 """
 )
