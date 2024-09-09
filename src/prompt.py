@@ -64,7 +64,8 @@ For example:
 
 **REMEMBER**: The query may refer to a subset of a larger group of organisms, for example in
 the query "What are the latest assemblies for the bivalve molluscs?", the taxon
-is "Bivalvia" and **NOT** "Mollusca" nor a lineage like "Mollusca: Bivalvia".
+is "Bivalvia" and **NOT** "Mollusca". If the taxon name contains multiple parts separated by ":",
+return only the part after the colon. E.g. for "Mollusca: Bivalvia", return only "Bivalvia".
 
 These queries have no taxon:
 - "what is the distribution of genome sizes across all classes?"
@@ -91,6 +92,11 @@ the output would be:
 If taxa is not applicable to the query, or the inferred scientific name is either None or an empty string,
 return an empty list.
 
+If entities are identified in the query, also generate a "masked_query" field in the response. This field
+should contain the query with each identified entity replaced with a placeholder. For example, if the query
+is "What are the latest assemblies for the families Canidae and Felidae?", the masked query would be "What are
+the latest assemblies for the families MASKED_ENTITY_0 and MASKED_ENTITY_1?".
+
 The query given by the user is as follows:
 `{query}`
 
@@ -103,10 +109,10 @@ Return the taxa as a list of entities in the following JSON format:
             "scientific_name": "..."
         }}
     ],
+    "masked_query": "...",
     "explanation": "..."
 }}
 
-```json
 """
 )
 
@@ -155,7 +161,6 @@ Do not give me python code, your response should simply be a JSON of the followi
     "explanation": "..."
 }}
 
-```json
 """
 )
 
@@ -188,7 +193,6 @@ Return the taxon id in the following JSON format:
     "explanation": "..."
 }}
 
-```json
 """
 )
 
@@ -232,7 +236,8 @@ We need to identify the intent of the query.
 An intent can be one of the following three types:
 - **search**: The user is looking for a table of values.
 - **count**: The user is looking for a count of something.
-- **record**: The user is looking for a specific taxon, assembly or sample record without any condition or constraints.
+- **record**: The user is looking for a specific taxon, assembly, or sample record
+  without any condition or constraints.
 - **tree**: The user is looking for a phylogenetic tree.
 - **histogram**: The user is looking for a histogram chart showing the distribution of a **SINGLE** attribute.
 - **scatter**: The user is looking for a scatter plot chart showing the distribution of a pair of attributes.
@@ -265,7 +270,6 @@ Return the intent in the following JSON format:
     "explanation": "..."
 }}
 
-```json
 """
 )
 
@@ -314,8 +318,10 @@ You are an intelligent assistant who **ONLY ANSWERS IN JSON FORMAT**.
 
 A user is trying to query a genomics database.
 
-We have identified some attributes in the query which might have specific conditions mentioned on them
-or they might simply be a "required" field in the output.
+We have identified some attributes in the query which may or may not have specific conditions mentioned on them.
+
+If the query can be interpreted as not placing any specific conditions on the value of the attribute, then the
+condition is "none".
 
 **Attribute List which needs to be filled with conditions:**
 `{attribute_metadata}`
@@ -323,46 +329,29 @@ or they might simply be a "required" field in the output.
 The query given by the user is as follows:
 `{query}`
 
-Your task is to return the above list of attributes and fill each attribute with conditions.
+Your task is to determine whether each attribute in the above list should have specific conditions attached or simply
+be required.
 The conditions can be one of the following:
->, <, >=, <=, =, !=, in, required
+>, <, >=, <=, =, !=, in, none
 
 If the condition is "in", the value will be a list of values.
-If the condition is "required", the value will be null, we just want the attribute to be "present" in the results.
+If the condition is "none", the value will be null, we just want the attribute to be **present** in the results.
 You need to reply in the following format:
 {{
     "attributes": [
         {{
             "attribute": "...",
-            "condition": "required",
+            "condition": "none",
             "value": "..." or ["...", "..."] or null
         }}
     ],
     "explanation": "why the condition was added..."
 }}
 
-e.g.
-query: "What is the contig N50 value for the family Canidae?"
-attributes: ["contig_n50"]
-
-response - 
-```json
-{
-    "attributes": [
-        {
-            "attribute": "contig_n50",
-            "condition": "required",
-            "value": null
-        }
-    ],
-    "explanation": "The contig N50 value is required in the output."
-}
-```
-
 *REMEMBER:*
-The result should contain ONLY attributes from the list given above, DO NOT add extra attributes.
-DO NOT omit any attributes from the list.
-In most cases, the condition will be "required".
+- The result should contain ONLY attributes from the list given above, DO NOT add extra attributes.
+- DO NOT omit any attributes from the list.
+- In case the exact condition is not specified, we can assume "none".
 
 """
 )
@@ -386,7 +375,8 @@ The query by the user is as follows:
 `{query}`
 
 *IMPORTANT:*
-We do not want a programmatic answer, we only need the best matching taxon id which has the closest "rank" to the query.
+We do not want a programmatic answer, we only need the best matching taxon id
+which has the closest "rank" to the query.
 Do not give me python code, your response should simply be a JSON of the following format:
 {{
     "taxon_id": "...",
@@ -395,6 +385,5 @@ Do not give me python code, your response should simply be a JSON of the followi
 
 The taxon_id HAS TO BE AN INTEGER.
 
-```json
 """
 )

@@ -3,8 +3,8 @@ from llama_index.core.query_pipeline import QueryPipeline as QP
 from agent.component_helpers import (
     construct_query,
     construct_url,
-    identify_attributes,
     define_attribute_condition,
+    identify_attributes,
     identify_entity,
     identify_index,
     identify_intent,

@@ -11,8 +11,8 @@ from llama_index.core import Settings
 from llama_index.core.output_parsers.utils import extract_json_str
 
 from prompt import (
-    ATTRIBUTE_IDENTIFICATION_PROMPT,
     ATTRIBUTE_CONDITION_PROMPT,
+    ATTRIBUTE_IDENTIFICATION_PROMPT,
     ENTITY_PROMPT,
     INDEX_PROMPT,
     INTENT_PROMPT,

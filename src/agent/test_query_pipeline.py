@@ -7,13 +7,13 @@ from llama_index.core.query_pipeline import QueryPipeline as QP
 from llama_index.llms.ollama import Ollama
 
 from agent.component_helpers import (
+    define_attribute_condition,
+    identify_attributes,
     identify_entity,
     identify_index,
     identify_intent,
     identify_rank,
-    identify_attributes,
     identify_time_frame,
-    define_attribute_condition,
 )
 from agent.goat_query_component import GoatQueryComponent
 
@@ -110,7 +110,8 @@ QUERIES = [
 
 
 @pytest.mark.parametrize(
-    "input_content, expected_index, _expected_intent, _expected_entities, _expected_rank, _expected_attribute, _expected_attribute_condition, _expected_time_from, _expected_time_to",
+    "input_content, expected_index, _expected_intent, _expected_entities, _expected_rank, _expected_attribute, "
+    "_expected_attribute_condition, _expected_time_from, _expected_time_to",
     QUERIES,
 )
 def test_index_module(
@@ -125,6 +126,7 @@ def test_index_module(
     _expected_time_to,
 ):
     # Skip the test if no expected index is provided
+    # sourcery skip: no-conditionals-in-tests
     if expected_index is None:
         pytest.skip("No expected index for this test case")
 
@@ -142,7 +144,8 @@ def test_index_module(
 
 
 @pytest.mark.parametrize(
-    "input_content, _expected_index, expected_intent, _expected_entities, _expected_rank, _expected_attribute, _expected_attribute_condition, _expected_time_from, _expected_time_to",
+    "input_content, _expected_index, expected_intent, _expected_entities, _expected_rank, _expected_attribute, "
+    "_expected_attribute_condition, _expected_time_from, _expected_time_to",
     QUERIES,
 )
 def test_intent_module(
@@ -157,6 +160,7 @@ def test_intent_module(
     _expected_time_to,
 ):
     # Skip the test if no expected intent is provided
+    # sourcery skip: no-conditionals-in-tests
     if expected_intent is None:
         pytest.skip("No expected intent for this test case")
 
@@ -174,7 +178,8 @@ def test_intent_module(
 
 
 @pytest.mark.parametrize(
-    "input_content, _expected_index, _expected_intent, expected_entities, _expected_rank, _expected_attribute, _expected_attribute_condition, _expected_time_from, _expected_time_to",
+    "input_content, _expected_index, _expected_intent, expected_entities, _expected_rank, _expected_attribute, "
+    "_expected_attribute_condition, _expected_time_from, _expected_time_to",
     QUERIES,
 )
 def test_entity_module(
@@ -189,6 +194,7 @@ def test_entity_module(
     _expected_time_to,
 ):
     # Skip the test if no expected entities are provided
+    # sourcery skip: no-conditionals-in-tests
     if expected_entities is None:
         pytest.skip("No expected entities for this test case")
 
@@ -204,6 +210,7 @@ def test_entity_module(
     # Assert the expected entity matches the result
     entities = result["state"]["entity"]["entities"]
     assert len(entities) == len(expected_entities)
+    # sourcery skip: no-loop-in-tests
     for entity in entities:
         assert (
             (entity["scientific_name"].lower() in [x.lower() for x in expected_entities])
@@ -213,7 +220,8 @@ def test_entity_module(
 
 
 @pytest.mark.parametrize(
-    "input_content, expected_index, expected_intent, expected_entities, expected_rank, _expected_attribute, _expected_attribute_condition, _expected_time_from, _expected_time_to",
+    "input_content, expected_index, expected_intent, expected_entities, expected_rank, _expected_attribute, "
+    "_expected_attribute_condition, _expected_time_from, _expected_time_to",
     QUERIES,
 )
 def test_rank_module(
@@ -228,6 +236,7 @@ def test_rank_module(
     _expected_time_to,
 ):
     # Skip the test if no expected rank is provided
+    # sourcery skip: no-conditionals-in-tests
     if expected_rank is None:
         pytest.skip("No expected rank for this test case")
 
@@ -259,7 +268,8 @@ def test_rank_module(
 
 
 @pytest.mark.parametrize(
-    "input_content, expected_index, _expected_intent, _expected_entities, _expected_rank, expected_attribute, _expected_attribute_condition, _expected_time_from, _expected_time_to",
+    "input_content, expected_index, _expected_intent, _expected_entities, _expected_rank, "
+    "expected_attribute, _expected_attribute_condition, _expected_time_from, _expected_time_to",
     QUERIES,
 )
 def test_attribute_module(
@@ -274,6 +284,7 @@ def test_attribute_module(
     _expected_time_to,
 ):
     # Skip the test if no expected attribute is provided
+    # sourcery skip: no-conditionals-in-tests
     if expected_attribute is None:
         pytest.skip("No expected attribute for this test case")
 
@@ -291,7 +302,8 @@ def test_attribute_module(
 
 
 @pytest.mark.parametrize(
-    "input_content, _expected_index, _expected_intent, _expected_entities, _expected_rank, _expected_attribute, _expected_attribute_condition, expected_time_from, expected_time_to",
+    "input_content, _expected_index, _expected_intent, _expected_entities, _expected_rank, "
+    "_expected_attribute, _expected_attribute_condition, expected_time_from, expected_time_to",
     QUERIES,
 )
 def test_time_module(
@@ -306,6 +318,7 @@ def test_time_module(
     expected_time_to,
 ):
     # Skip the test if no expected time is provided
+    # sourcery skip: no-conditionals-in-tests
     if expected_time_from is None and expected_time_to is None:
         pytest.skip("No expected time for this test case")
 
@@ -326,7 +339,8 @@ def test_time_module(
 
 
 @pytest.mark.parametrize(
-    "input_content, expected_index, _expected_intent, _expected_entities, _expected_rank, expected_attribute, expected_attribute_condition, _expected_time_from, _expected_time_to",
+    "input_content, expected_index, _expected_intent, _expected_entities, _expected_rank, "
+    "expected_attribute, expected_attribute_condition, _expected_time_from, _expected_time_to",
     QUERIES,
 )
 def test_define_attribute_condition(
@@ -341,6 +355,7 @@ def test_define_attribute_condition(
     _expected_time_to,
 ):
     # Skip the test if no expected attribute is provided
+    # sourcery skip: no-conditionals-in-tests
     if expected_attribute is None or expected_attribute_condition is None:
         pytest.skip("No expected attribute for this test case")
 
