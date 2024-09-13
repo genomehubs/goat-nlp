@@ -4,7 +4,7 @@ llama-index-llms-ollama
 llama-index-llms-replicate
 llama-index-embeddings-huggingface
 llama-parse
-Werkzeug==2.2.2
+Werkzeug==3.0.3
 python-dotenv
 arize-phoenix
 openinference-instrumentation-llama-index
