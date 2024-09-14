@@ -28,6 +28,7 @@ logger = logging.getLogger("goat_nlp.component_helpers")
 def identify_index(input: str, state: Dict[str, Any]):
     index_response = Settings.llm.complete(INDEX_PROMPT.format(query=input)).text
     state["index"] = json.loads(extract_json_str(index_response))
+    state["status"] = "Identify Index"
 
     if "classification" not in state["index"] or "explanation" not in state["index"]:
         raise ValueError("Invalid response from model at index identification stage.")
@@ -36,6 +37,7 @@ def identify_index(input: str, state: Dict[str, Any]):
 def identify_entity(input: str, state: Dict[str, Any]):
     entity_response = Settings.llm.complete(ENTITY_PROMPT.format(query=input)).text
     state["entity"] = json.loads(extract_json_str(entity_response))
+    state["status"] = "Identify Entity"
 
     if "entities" not in state["entity"] or "explanation" not in state["entity"]:
         raise ValueError("Invalid response from model at entity identification stage.")
@@ -47,6 +49,7 @@ def identify_rank(input: str, state: Dict[str, Any]):
         RANK_PROMPT.format(query=input, results=json.dumps(cleaned_taxons, indent=4))
     ).text
     state["rank"] = json.loads(extract_json_str(rank_response))
+    state["status"] = "Identify Rank"
 
     if "rank" not in state["rank"] or "explanation" not in state["rank"]:
         raise ValueError("Invalid response from model at rank identification stage.")
@@ -57,6 +60,7 @@ def identify_time_frame(input: str, state: Dict[str, Any]):
         TIME_PROMPT.format(query=input, time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     ).text
     state["timeframe"] = json.loads(extract_json_str(time_response))
+    state["status"] = "Identify Time Frame"
 
     if (
         "from_date" not in state["timeframe"]
@@ -69,6 +73,7 @@ def identify_time_frame(input: str, state: Dict[str, Any]):
 def identify_intent(input: str, state: Dict[str, Any]):
     intent_response = Settings.llm.complete(INTENT_PROMPT.format(query=input)).text
     state["intent"] = json.loads(extract_json_str(intent_response))
+    state["status"] = "Identify Intent"
 
     if "intent" not in state["intent"] or "explanation" not in state["intent"]:
         raise ValueError("Invalid response from model at intent identification stage.")
@@ -107,6 +112,7 @@ def define_attribute_condition(input: str, state: Dict[str, Any]):
         )
     ).text
     state["attributes"] = json.loads(extract_json_str(attribute_response))
+    state["status"] = "Define Attribute Condition"
 
     if "attributes" not in state["attributes"] or "explanation" not in state["attributes"]:
         raise ValueError("Invalid response from model at attribute identification stage.")
@@ -137,6 +143,7 @@ def identify_attributes(input: str, state: Dict[str, Any]):
         )
     ).text
     state["attribute_identification"] = json.loads(extract_json_str(attribute_response))
+    state["status"] = "Identify Attributes"
 
     if "attributes" not in state["attributes"] or "explanation" not in state["attributes"]:
         raise ValueError("Invalid response from model at attribute identification stage.")
@@ -191,6 +198,8 @@ def construct_query(input: str, state: Dict[str, Any]):
 
     query = query.removesuffix(" AND ")
 
+    state["status"] = "Construct Query"
+
     state["query"] = query
 
 
@@ -202,6 +211,7 @@ def construct_url(input: str, state: Dict[str, Any]):
     include_estimates = str(not state["rank"]["rank"].endswith("species")).lower()
     suffix = f'&result={state["index"]["classification"]}&taxonomy=ncbi'
     suffix += f"{fields}&names=common_name&ranks=&includeEstimates={include_estimates}&size=10"
+    state["status"] = "Construct URL"
     state["final_url"] = base_url + endpoint + "query=" + urllib.parse.quote(state["query"]) + suffix
 
 
@@ -215,6 +225,7 @@ def identify_record(input: str, state: Dict[str, Any]):
         RECORD_PROMPT.format(query=input, results=json.dumps(cleaned_taxons, indent=4))
     ).text
     state["record"] = json.loads(extract_json_str(taxon_response))
+    state["status"] = "Identify Record"
 
     if "taxon_id" not in state["record"] or "explanation" not in state["record"]:
         raise ValueError("Invalid response from model at record identification stage.")
