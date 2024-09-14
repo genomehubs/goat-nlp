@@ -93,7 +93,14 @@ export default function Home() {
   };
 
   const runGoatPipeline = async () => {
-    const response = await fetch('http://localhost:5000/api/chat', { method: "POST" })
+    const response = await fetch('http://localhost:5000/api/chat', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ user_input: input })
+    })
     const reader = response.body?.getReader()
 
     if (reader) {
@@ -101,7 +108,7 @@ export default function Home() {
         const { done, value } = await reader.read()
         if (done) break
         let temp = new TextDecoder().decode(value);
-        console.log(temp)
+        toast.success(JSON.parse(temp)['state'] + " completed successfully!")
       }
     }
   }

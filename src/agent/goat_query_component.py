@@ -24,11 +24,11 @@ class GoatQueryComponent(CustomQueryComponent):
             self.fn(kwargs["input"]["input"], kwargs["input"]["state"])
             if kwargs["input"]["state"]["status"] == "Construct URL":
                 kwargs["input"]["state"]["queue"].put(
-                    {"done": True, "error": False, "state": ["input"]["state"]["status"]}
+                    {"done": True, "error": False, "state": kwargs["input"]["state"]["status"]}
                 )
             else:
                 kwargs["input"]["state"]["queue"].put(
-                    {"done": False, "error": False, "state": ["input"]["state"]["status"]}
+                    {"done": False, "error": False, "state": kwargs["input"]["state"]["status"]}
                 )
         except Exception as e:
             error = True
@@ -36,7 +36,7 @@ class GoatQueryComponent(CustomQueryComponent):
                 {
                     "done": False,
                     "error": True,
-                    "exception": ["input"]["state"]["status"] + " step failed with following error: " + str(e),
+                    "exception": kwargs["input"]["state"]["status"] + " step failed with following error: " + str(e),
                     "state": "error_state",
                 }
             )

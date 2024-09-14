@@ -51,26 +51,28 @@ def home():
 
 @app.route("/api/chat", methods=["POST"])
 def chat():
-    # agent.reset()
-    state_queue = queue.Queue()
-
-    def stream_response(state_queue, qp):
-        state_queue.put({"done": False, "error": False, "exception": "", "state": ""})
+    def stream_response(input):
         for _ in range(os.getenv("RETRY_LIMIT", 3)):
-            response = qp.arun(input={"input": request.form["user_input"], "state": {}, "queue": state_queue})
-            current_state = state_queue.get()
+            state_queue = queue.Queue()
+            current_state = {"done": False, "error": False, "exception": "", "state": ""}
+            t1 = threading.Thread(
+                target=lambda: qp.run(input={"input": input.split("#goat ")[1], "state": {"queue": state_queue}})
+            )
+            t1.start()
             while True:
                 time.sleep(3)
                 if not state_queue.empty():
                     temp_state = state_queue.get()
-                    if temp_state["done"]:
-                        break
-                    if current_state["state"] == "error_state":
-                        yield f"#error {current_state['exception']}"
-                    else:
-                        yield f"{current_state['state']} step completed"
+                    if current_state != temp_state:
+                        print("State change")
+                        current_state = temp_state
+                        yield f"{json.dumps(current_state)}\n\n"
+                        if current_state["done"]:
+                            break
+            if current_state["done"]:
+                break
 
-    return Response(stream_response(state_queue, qp), mimetype="text/event-stream")
+    return Response(stream_response(request.json["user_input"]), mimetype="text/event-stream")
 
 
 if __name__ == "__main__":
