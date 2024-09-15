@@ -93,6 +93,7 @@ export default function Home() {
   };
 
   const runGoatPipeline = async () => {
+
     const response = await fetch('http://localhost:5000/api/chat', {
       method: 'POST',
       headers: {
@@ -102,13 +103,24 @@ export default function Home() {
       body: JSON.stringify({ user_input: input })
     })
     const reader = response.body?.getReader()
+    addMessage({ role: "user", content: input, id: chatId });
+    setMessages([...messages]);
+    setInput("");
 
     if (reader) {
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
         let temp = new TextDecoder().decode(value);
-        toast.success(JSON.parse(temp)['state'] + " completed successfully!")
+        let currentState = JSON.parse(temp)
+        if (currentState['done']) {
+          addMessage({ role: "assistant", content: "Final URL: [GoaT](" + currentState['url'] + ")", id: chatId });
+          setMessages([...messages]);
+          setLoadingSubmit(false);
+          break;
+        } else {
+          toast.success(JSON.parse(temp)['state'] + " completed successfully!")
+        }
       }
     }
   }

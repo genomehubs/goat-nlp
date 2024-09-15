@@ -24,7 +24,12 @@ class GoatQueryComponent(CustomQueryComponent):
             self.fn(kwargs["input"]["input"], kwargs["input"]["state"])
             if kwargs["input"]["state"]["status"] == "Construct URL":
                 kwargs["input"]["state"]["queue"].put(
-                    {"done": True, "error": False, "state": kwargs["input"]["state"]["status"]}
+                    {
+                        "done": True,
+                        "error": False,
+                        "state": kwargs["input"]["state"]["status"],
+                        "url": kwargs["input"]["state"]["final_url"],
+                    }
                 )
             else:
                 kwargs["input"]["state"]["queue"].put(
