@@ -123,7 +123,7 @@ export default function Home() {
             // break;
           }
           else if (currentState['done']) {
-            addMessage({ role: "assistant", content: '<a href="' + currentState['url'] + '" target="_blank">GoaT Link!</a>', id: chatId });
+            addMessage({ role: "assistant", content: '<a style="font-size: 1.5rem; text-decoration: underline; font-style: italic;" href="' + currentState['url'] + '" target="_blank">GoaT Link!</a>', id: chatId });
             addMessage({ role: "assistant", content: "Webpage Details:\nHere is the JSON curated after parsing the above webpage:\n\n" + JSON.stringify(currentState['api_response']), id: chatId });
             addMessage({ role: "assistant", content: currentState['markdown'], id: chatId });
             setMessages([...messages]);
