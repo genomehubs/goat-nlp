@@ -112,7 +112,9 @@ export default function Home() {
       if (reader) {
         while (true) {
           const { done, value } = await reader.read()
-          if (done) break
+          if (done) {
+            break
+          }
           let temp = new TextDecoder().decode(value);
           let currentState = JSON.parse(temp)
           if (currentState['error']) {
@@ -204,21 +206,20 @@ export default function Home() {
     console.log(input)
     if (input.startsWith("#goat")) {
       runGoatPipeline()
+    } else if (env === "production") {
+      handleSubmitProduction(e);
     } else {
-      // handleSubmitProduction(e);
-      if (env === "production") {
-        handleSubmitProduction(e);
-      } else {
-        // Call the handleSubmit function with the options
-        handleSubmit(e, requestOptions);
-      }
+      // Call the handleSubmit function with the options
+      handleSubmit(e, requestOptions);
     }
 
   };
 
   const onOpenChange = (isOpen: boolean) => {
     const username = localStorage.getItem("ollama_user")
-    if (username) return setOpen(isOpen)
+    if (username) {
+      return setOpen(isOpen)
+    }
 
     localStorage.setItem("ollama_user", "Anonymous")
     window.dispatchEvent(new Event("storage"))
