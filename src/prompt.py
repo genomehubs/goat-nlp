@@ -232,7 +232,8 @@ We need to identify the intent of the query.
 An intent can be one of the following three types:
 - **search**: The user is looking for a table of values.
 - **count**: The user is looking for a count of something.
-- **record**: The user is looking for a specific taxon, assembly or sample record without any condition or constraints.
+- **record**: The user is looking for a specific taxon, assembly or sample record without any condition or
+ constraints.
 - **tree**: The user is looking for a phylogenetic tree.
 - **histogram**: The user is looking for a histogram chart showing the distribution of a **SINGLE** attribute.
 - **scatter**: The user is looking for a scatter plot chart showing the distribution of a pair of attributes.
@@ -386,7 +387,8 @@ The query by the user is as follows:
 `{query}`
 
 *IMPORTANT:*
-We do not want a programmatic answer, we only need the best matching taxon id which has the closest "rank" to the query.
+We do not want a programmatic answer, we only need the best matching taxon id which has the
+ closest "rank" to the query.
 Do not give me python code, your response should simply be a JSON of the following format:
 {{
     "taxon_id": "...",

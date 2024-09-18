@@ -1,21 +1,22 @@
+import json
 import logging
 import os
+import queue
 import sys
-import json, time
+import threading
+import time
 
 import llama_index.core
-from llama_index.core.llms import ChatMessage
 import phoenix as px
-from flask import Flask, render_template, request
+from flask import Flask, Response, render_template, request
+from flask_cors import CORS
 from llama_index.core import Settings
+from llama_index.core.llms import ChatMessage
 from llama_index.llms.ollama import Ollama
 from openinference.instrumentation.llama_index import LlamaIndexInstrumentor
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk import trace as trace_sdk
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
-from flask import Response
-from flask_cors import CORS
-import threading, queue
 
 from agent.query_pipeline import qp
 

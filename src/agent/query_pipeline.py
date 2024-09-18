@@ -3,15 +3,15 @@ from llama_index.core.query_pipeline import QueryPipeline as QP
 from agent.component_helpers import (
     construct_query,
     construct_url,
-    identify_attributes,
     define_attribute_condition,
+    html_explanations,
+    identify_attributes,
     identify_entity,
     identify_index,
     identify_intent,
     identify_rank,
     identify_record,
     identify_time_frame,
-    html_explanations,
 )
 from agent.goat_query_component import GoatQueryComponent
 

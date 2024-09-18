@@ -1,10 +1,10 @@
+import ast
 import json
 import logging
 import os
 import urllib
 from datetime import datetime
 from typing import Any, Dict
-import ast
 
 import cachetools.func
 import requests
@@ -12,13 +12,13 @@ from llama_index.core import Settings
 from llama_index.core.output_parsers.utils import extract_json_str
 
 from prompt import (
-    ATTRIBUTE_IDENTIFICATION_PROMPT,
     ATTRIBUTE_CONDITION_PROMPT,
+    ATTRIBUTE_IDENTIFICATION_PROMPT,
     ENTITY_PROMPT,
-    MARKDOWN_PROMPT,
     INDEX_PROMPT,
     INTENT_PROMPT,
     LINEAGE_PROMPT,
+    MARKDOWN_PROMPT,
     RANK_PROMPT,
     RECORD_PROMPT,
     TIME_PROMPT,

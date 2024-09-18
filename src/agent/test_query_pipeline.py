@@ -7,13 +7,13 @@ from llama_index.core.query_pipeline import QueryPipeline as QP
 from llama_index.llms.ollama import Ollama
 
 from agent.component_helpers import (
+    define_attribute_condition,
+    identify_attributes,
     identify_entity,
     identify_index,
     identify_intent,
     identify_rank,
-    identify_attributes,
     identify_time_frame,
-    define_attribute_condition,
 )
 from agent.goat_query_component import GoatQueryComponent
 
