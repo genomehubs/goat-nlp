@@ -20,7 +20,8 @@ jobs:
       - name: flake8 Lint
         uses: TrueBrain/actions-flake8@v2
         with:
-          ignore: E203,E701,W503,W504,BLK100 src/agent/test_query_pipeline.py
+          ignore: E203,E701,W503,W504,BLK100
+          exclude: src/agent/test_query_pipeline.py
           max_line_length: 118
           path: src
           plugins: flake8-black flake8-isort flake8-quotes
