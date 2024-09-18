@@ -11,7 +11,6 @@ import phoenix as px
 from flask import Flask, Response, render_template, request
 from flask_cors import CORS
 from llama_index.core import Settings
-from llama_index.core.llms import ChatMessage
 from llama_index.llms.ollama import Ollama
 from openinference.instrumentation.llama_index import LlamaIndexInstrumentor
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
