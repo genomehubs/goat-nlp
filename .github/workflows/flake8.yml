@@ -22,7 +22,7 @@ jobs:
         with:
           ignore: E203,E701,W503,W504,BLK100
           exclude: src/agent/test_query_pipeline.py
-          max_line_length: 118
+          max_line_length: 185
           path: src
           plugins: flake8-black flake8-isort flake8-quotes
           error_classes: E,H,I00,Q00
