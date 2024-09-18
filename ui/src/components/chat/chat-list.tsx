@@ -8,6 +8,7 @@ import Image from "next/image";
 import CodeDisplayBlock from "../code-display-block";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
 import { INITIAL_QUESTIONS } from "@/utils/initial-questions";
 import { Button } from "../ui/button";
 
@@ -92,7 +93,7 @@ export default function ChatList({
               alt="AI"
               width={60}
               height={60}
-              className="h-20 w-14 object-contain light:invert"
+              className="h-20 w-14 object-contain dark:invert-0 invert"
             />
             <p className="text-center text-lg text-muted-foreground">
               How can I help you today?
@@ -189,7 +190,7 @@ export default function ChatList({
                       alt="AI"
                       width={6}
                       height={6}
-                      className="object-contain light:invert"
+                      className="object-contain dark:invert-0 invert"
                     />
                   </Avatar>
                   <span className="bg-accent p-3 rounded-md max-w-xs sm:max-w-2xl overflow-x-auto">
@@ -197,7 +198,7 @@ export default function ChatList({
                     {message.content.split("```").map((part, index) => {
                       if (index % 2 === 0) {
                         return (
-                          <Markdown key={index} remarkPlugins={[remarkGfm]}>
+                          <Markdown key={index} remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
                             {part}
                           </Markdown>
                         );
@@ -229,7 +230,7 @@ export default function ChatList({
                 alt="AI"
                 width={6}
                 height={6}
-                className="object-contain light:invert"
+                className="object-contain dark:invert-0 invert"
               />
             </Avatar>
             <div className="bg-accent p-3 rounded-md max-w-xs sm:max-w-2xl overflow-x-auto">

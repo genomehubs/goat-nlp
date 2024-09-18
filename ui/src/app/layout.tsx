@@ -7,8 +7,8 @@ import { Toaster } from "@/components/ui/sonner"
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Ollama UI",
-  description: "Ollama chatbot web interface",
+  title: "GoaT NLP",
+  description: "Chatbot web interface for GoaT NLP",
 };
 
 export const viewport = {
@@ -28,7 +28,7 @@ export default function RootLayout({
       <body className={inter.className}>
         <ThemeProvider attribute="class" defaultTheme="dark">
           {children}
-        <Toaster />
+          <Toaster />
         </ThemeProvider>
       </body>
     </html>

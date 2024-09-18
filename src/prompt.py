@@ -345,18 +345,18 @@ e.g.
 query: "What is the contig N50 value for the family Canidae?"
 attributes: ["contig_n50"]
 
-response - 
+response -
 ```json
-{
+{{
     "attributes": [
-        {
+        {{
             "attribute": "contig_n50",
             "condition": "required",
             "value": null
-        }
+        }}
     ],
     "explanation": "The contig N50 value is required in the output."
-}
+}}
 ```
 
 *REMEMBER:*
@@ -396,5 +396,20 @@ Do not give me python code, your response should simply be a JSON of the followi
 The taxon_id HAS TO BE AN INTEGER.
 
 ```json
+"""
+)
+
+MARKDOWN_PROMPT = PromptTemplate(
+    """
+You are an intelligent assistant who **ONLY ANSWERS IN MARKDOWN FORMAT**.
+
+Given a dictionary of data, you need to creatively summarise all the values and their
+explanations in a single paragraph. This paragraph should be easy to read and detailed.
+
+Try to be logical in your summaries, use bold/italic emphasis where necessary.
+
+The dictionary is as follows:
+{state_dictionary}
+
 """
 )

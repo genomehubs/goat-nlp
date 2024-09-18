@@ -11,6 +11,7 @@ from agent.component_helpers import (
     identify_rank,
     identify_record,
     identify_time_frame,
+    html_explanations,
 )
 from agent.goat_query_component import GoatQueryComponent
 
@@ -28,6 +29,7 @@ qp.add_modules(
         "query": GoatQueryComponent(fn=construct_query),
         "url": GoatQueryComponent(fn=construct_url),
         "record": GoatQueryComponent(fn=identify_record),
+        "html_explanations": GoatQueryComponent(fn=html_explanations),
     }
 )
 
@@ -39,6 +41,7 @@ qp.add_link(
     "record",
     condition_fn=lambda x: x["state"]["intent"]["intent"] == "record",
 )
+qp.add_link("record", "html_explanations")
 qp.add_link("entity", "rank", condition_fn=lambda x: x["state"]["intent"]["intent"] != "record")
-qp.add_chain(["rank", "attribute_identification", "attribute", "time", "query", "url"])
+qp.add_chain(["rank", "attribute_identification", "attribute", "time", "query", "url", "html_explanations"])
 # qp.add_chain(["intent", "index", "entity", "rank", "time", "query", "url"])

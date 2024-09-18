@@ -4,6 +4,7 @@ import os
 import urllib
 from datetime import datetime
 from typing import Any, Dict
+import ast
 
 import cachetools.func
 import requests
@@ -14,6 +15,7 @@ from prompt import (
     ATTRIBUTE_IDENTIFICATION_PROMPT,
     ATTRIBUTE_CONDITION_PROMPT,
     ENTITY_PROMPT,
+    MARKDOWN_PROMPT,
     INDEX_PROMPT,
     INTENT_PROMPT,
     LINEAGE_PROMPT,
@@ -117,6 +119,10 @@ def define_attribute_condition(input: str, state: Dict[str, Any]):
     if "attributes" not in state["attributes"] or "explanation" not in state["attributes"]:
         raise ValueError("Invalid response from model at attribute identification stage.")
 
+    for attribute in state["attributes"]["attributes"]:
+        if attribute["attribute"] not in state["attribute_identification"]["attributes"]:
+            state["attributes"]["attributes"].pop(attribute)
+
 
 def identify_attributes(input: str, state: Dict[str, Any]):
 
@@ -142,10 +148,13 @@ def identify_attributes(input: str, state: Dict[str, Any]):
             query=input,
         )
     ).text
-    state["attribute_identification"] = json.loads(extract_json_str(attribute_response))
+    state["attribute_identification"] = ast.literal_eval(extract_json_str(attribute_response))
     state["status"] = "Identify Attributes"
 
-    if "attributes" not in state["attributes"] or "explanation" not in state["attributes"]:
+    if (
+        "attributes" not in state["attribute_identification"]
+        or "explanation" not in state["attribute_identification"]
+    ):
         raise ValueError("Invalid response from model at attribute identification stage.")
 
 
@@ -270,3 +279,15 @@ def query_entity(state: Dict[str, Any], query_operator="tax_name", include_sub_s
         }
         for res in response_parsed["results"]
     ]
+
+
+def html_explanations(input: str, state: Dict[str, Any]):
+    cleaned_dictionary = state.copy()
+    cleaned_dictionary.pop("queue")
+    cleaned_dictionary.pop("final_url")
+    cleaned_dictionary.pop("status")
+    index_response = Settings.llm.complete(
+        MARKDOWN_PROMPT.format(state_dictionary=json.dumps(cleaned_dictionary, indent=4))
+    ).text
+    state["markdown"] = index_response.replace('"', "'")
+    state["status"] = "Markdown Explanation"

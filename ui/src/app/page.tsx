@@ -93,35 +93,47 @@ export default function Home() {
   };
 
   const runGoatPipeline = async () => {
+    try {
+      addMessage({ role: "user", content: input, id: chatId });
+      setMessages([...messages]);
+      let user_input = input;
 
-    const response = await fetch('http://localhost:5000/api/chat', {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ user_input: input })
-    })
-    const reader = response.body?.getReader()
-    addMessage({ role: "user", content: input, id: chatId });
-    setMessages([...messages]);
-    setInput("");
+      setInput("");
+      const response = await fetch('http://localhost:5000/api/chat', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ user_input: user_input })
+      })
+      const reader = response.body?.getReader()
 
-    if (reader) {
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        let temp = new TextDecoder().decode(value);
-        let currentState = JSON.parse(temp)
-        if (currentState['done']) {
-          addMessage({ role: "assistant", content: "Final URL: [GoaT](" + currentState['url'] + ")", id: chatId });
-          setMessages([...messages]);
-          setLoadingSubmit(false);
-          break;
-        } else {
-          toast.success(JSON.parse(temp)['state'] + " completed successfully!")
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          let temp = new TextDecoder().decode(value);
+          let currentState = JSON.parse(temp)
+          if (currentState['error']) {
+            toast.error("Something went wrong, retrying...\nError: " + currentState['error'])
+            // setLoadingSubmit(false);
+            // break;
+          }
+          if (currentState['done']) {
+            addMessage({ role: "assistant", content: '<a href="' + currentState['url'] + '" target="_blank">GoaT Link!</a>', id: chatId });
+            addMessage({ role: "assistant", content: currentState['markdown'], id: chatId });
+            setMessages([...messages]);
+            setLoadingSubmit(false);
+            break;
+          } else {
+            toast.success(JSON.parse(temp)['state'] + " completed successfully!")
+          }
         }
       }
+    } catch (error) {
+      toast.error("An error occurred. Please try again.");
+      setLoadingSubmit(false);
     }
   }
 

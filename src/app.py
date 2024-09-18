@@ -67,7 +67,7 @@ def chat():
                         print("State change")
                         current_state = temp_state
                         yield f"{json.dumps(current_state)}\n\n"
-                        if current_state["done"]:
+                        if current_state["done"] or current_state["error"]:
                             break
             if current_state["done"]:
                 break

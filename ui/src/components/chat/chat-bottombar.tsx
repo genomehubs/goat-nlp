@@ -85,13 +85,13 @@ export default function ChatBottombar({
       <AnimatePresence initial={false}>
         <div className="w-full items-center flex relative gap-2">
           <div className="absolute left-3 z-10">
-            <Button
+            {/* <Button
               className="shrink-0 rounded-full"
               variant="ghost"
               size="icon"
             >
               <ImageIcon className="w-5 h-5" />
-            </Button>
+            </Button> */}
           </div>
           <form
             onSubmit={handleSubmit}
@@ -107,7 +107,7 @@ export default function ChatBottombar({
               onChange={handleInputChange}
               name="message"
               placeholder={
-                !isListening ? "Enter your prompt here" : "Listening"
+                !isListening ? "Start with #goat for GoaT specific query..." : "Listening"
               }
               className=" max-h-24 px-14 bg-accent py-[22px] text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 w-full  rounded-full flex items-center h-16 resize-none overflow-hidden dark:bg-card"
             />

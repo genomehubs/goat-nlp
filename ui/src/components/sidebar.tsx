@@ -131,7 +131,7 @@ export function Sidebar({
                 alt="AI"
                 width={28}
                 height={28}
-                className="light:invert hidden 2xl:block"
+                className="dark:invert-0 invert hidden 2xl:block"
               />
             )}
             New chat

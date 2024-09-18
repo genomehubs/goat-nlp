@@ -22,13 +22,14 @@ class GoatQueryComponent(CustomQueryComponent):
         exception = None
         try:
             self.fn(kwargs["input"]["input"], kwargs["input"]["state"])
-            if kwargs["input"]["state"]["status"] == "Construct URL":
+            if kwargs["input"]["state"]["status"] == "Markdown Explanation":
                 kwargs["input"]["state"]["queue"].put(
                     {
                         "done": True,
                         "error": False,
                         "state": kwargs["input"]["state"]["status"],
                         "url": kwargs["input"]["state"]["final_url"],
+                        "markdown": kwargs["input"]["state"]["markdown"],
                     }
                 )
             else:

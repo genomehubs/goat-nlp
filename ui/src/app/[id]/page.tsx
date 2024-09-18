@@ -115,6 +115,53 @@ export default function Page({ params }: { params: { id: string } }) {
     }
   };
 
+
+  const runGoatPipeline = async () => {
+    try {
+      addMessage({ role: "user", content: input, id: chatId });
+      setMessages([...messages]);
+      let user_input = input;
+
+      setInput("");
+      const response = await fetch('http://localhost:5000/api/chat', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ user_input: user_input })
+      })
+      const reader = response.body?.getReader()
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+          let temp = new TextDecoder().decode(value);
+          let currentState = JSON.parse(temp)
+          if (currentState['error']) {
+            toast.error("Something went wrong, retrying...\nError: " + currentState['error'])
+            // setLoadingSubmit(false);
+            // break;
+          }
+          if (currentState['done']) {
+            addMessage({ role: "assistant", content: '<a href="' + currentState['url'] + '" target="_blank">GoaT Link!</a>', id: chatId });
+            addMessage({ role: "assistant", content: currentState['markdown'], id: chatId });
+            setMessages([...messages]);
+            setLoadingSubmit(false);
+            break;
+          } else {
+            toast.success(JSON.parse(temp)['state'] + " completed successfully!")
+          }
+        }
+      }
+    } catch (error) {
+      toast.error("An error occurred. Please try again.");
+      setLoadingSubmit(false);
+    }
+  }
+
+
   const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoadingSubmit(true);
@@ -129,14 +176,21 @@ export default function Page({ params }: { params: { id: string } }) {
         },
       },
     };
-
-    if (env === "production" && selectedModel !== "REST API") {
-      handleSubmitProduction(e);
+    // console.log(process.env.NODE_ENV)
+    // console.log("Heeeer")
+    console.log(input)
+    if (input.startsWith("#goat")) {
+      runGoatPipeline()
     } else {
-      // use the /api/chat route
-      // Call the handleSubmit function with the options
-      handleSubmit(e, requestOptions);
+      // handleSubmitProduction(e);
+      if (env === "production") {
+        handleSubmitProduction(e);
+      } else {
+        // Call the handleSubmit function with the options
+        handleSubmit(e, requestOptions);
+      }
     }
+
   };
 
   // When starting a new chat, append the messages to the local storage
