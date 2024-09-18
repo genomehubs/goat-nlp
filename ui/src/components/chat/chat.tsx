@@ -54,7 +54,7 @@ export default function Chat({
 
       <ChatList
         setSelectedModel={setSelectedModel}
-        messages={messages}
+        messages={messages.filter((message) => !message.content.startsWith("Webpage Details:"))}
         input={input}
         handleInputChange={handleInputChange}
         handleSubmit={handleSubmit}

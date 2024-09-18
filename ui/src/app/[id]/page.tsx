@@ -146,8 +146,9 @@ export default function Page({ params }: { params: { id: string } }) {
             // setLoadingSubmit(false);
             // break;
           }
-          if (currentState['done']) {
+          else if (currentState['done']) {
             addMessage({ role: "assistant", content: '<a href="' + currentState['url'] + '" target="_blank">GoaT Link!</a>', id: chatId });
+            addMessage({ role: "assistant", content: "Webpage Details:\nHere is the JSON curated after parsing the above webpage:\n\n" + currentState['api_response'], id: chatId });
             addMessage({ role: "assistant", content: currentState['markdown'], id: chatId });
             setMessages([...messages]);
             setLoadingSubmit(false);

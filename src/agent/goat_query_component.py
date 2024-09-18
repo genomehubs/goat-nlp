@@ -30,6 +30,7 @@ class GoatQueryComponent(CustomQueryComponent):
                         "state": kwargs["input"]["state"]["status"],
                         "url": kwargs["input"]["state"]["final_url"],
                         "markdown": kwargs["input"]["state"]["markdown"],
+                        "api_response": kwargs["input"]["state"]["api_response"],
                     }
                 )
             else:

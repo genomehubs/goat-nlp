@@ -222,6 +222,21 @@ def construct_url(input: str, state: Dict[str, Any]):
     suffix += f"{fields}&names=common_name&ranks=&includeEstimates={include_estimates}&size=10"
     state["status"] = "Construct URL"
     state["final_url"] = base_url + endpoint + "query=" + urllib.parse.quote(state["query"]) + suffix
+    state["api_url"] = base_url + "api/v2/" + endpoint + "query=" + urllib.parse.quote(state["query"]) + suffix
+
+    try:
+        response = requests.get(state["api_url"])
+        parsed_response = response.json()
+        if parsed_response["status"]["success"]:
+            if state["intent"]["intent"] == "record":
+                state["api_response"] = parsed_response["records"][0]
+                for attribute_name, attribute in state["api_response"]["attributes"].items():
+                    state["api_response"]["attributes"][attribute_name] = attribute["value"]
+            elif state["intent"]["intent"] == "search":
+                state["api_response"] = parsed_response["results"]
+    except Exception as e:
+        print(str(e))
+        pass
 
 
 def identify_record(input: str, state: Dict[str, Any]):
@@ -244,6 +259,23 @@ def identify_record(input: str, state: Dict[str, Any]):
         + str(state["record"]["taxon_id"])
         + f"&result={state['index']['classification']}"
     )
+    state["api_url"] = state["final_url"].replace("/record", "/api/v2/record")
+
+    try:
+        response = requests.get(state["api_url"])
+        parsed_response = response.json()
+        if parsed_response["status"]["success"]:
+            if state["intent"]["intent"] == "record":
+                state["api_response"] = parsed_response["records"][0]
+                for attribute_name, attribute in state["api_response"]["record"]["attributes"].items():
+                    state["api_response"]["record"]["attributes"][attribute_name] = (
+                        attribute["value"] if "value" in attribute else ""
+                    )
+            elif state["intent"]["intent"] == "search":
+                state["api_response"] = parsed_response["results"]
+    except Exception as e:
+        print(str(e))
+        pass
 
 
 def query_entity(state: Dict[str, Any], query_operator="tax_name", include_sub_species=True) -> list:
@@ -286,6 +318,8 @@ def html_explanations(input: str, state: Dict[str, Any]):
     cleaned_dictionary.pop("queue")
     cleaned_dictionary.pop("final_url")
     cleaned_dictionary.pop("status")
+    cleaned_dictionary.pop("api_url")
+    cleaned_dictionary.pop("api_response", None)
     index_response = Settings.llm.complete(
         MARKDOWN_PROMPT.format(state_dictionary=json.dumps(cleaned_dictionary, indent=4))
     ).text

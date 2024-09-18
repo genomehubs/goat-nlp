@@ -66,7 +66,33 @@ export ATTRIBUTE_API_TTL=172800
 python -m flask run
 ```
 
-The UI will be available at `http://localhost:5000/`
+## Step 8: Start the frontend
+
+**Change directory:**
+
+```
+cd ui
+```
+
+**Create a `.env` file:**
+
+```
+NEXT_PUBLIC_OLLAMA_URL="http://127.0.0.1:11434"
+NEXT_GOAT_NLP_BACKEND="http://localhost:5000"
+```
+
+**Install dependencies:**
+
+```
+npm install
+```
+
+**Start the development server:**
+
+```
+npm run dev
+```
+The UI will be available at `http://localhost:3000/`
 
 # Testing guide
 
