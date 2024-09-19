@@ -123,9 +123,9 @@ export default function Home() {
             // break;
           }
           else if (currentState['done']) {
-            addMessage({ role: "assistant", content: '<a style="font-size: 1.5rem; text-decoration: underline; font-style: italic;" href="' + currentState['url'] + '" target="_blank">GoaT Link!</a>', id: chatId });
-            addMessage({ role: "assistant", content: "Webpage Details:\nHere is the JSON curated after parsing the above webpage:\n\n" + JSON.stringify(currentState['api_response']), id: chatId });
             addMessage({ role: "assistant", content: currentState['markdown'], id: chatId });
+            addMessage({ role: "assistant", content: '<a style="font-size: 1.5rem; text-decoration: underline; font-style: italic;" href="' + currentState['url'] + '" target="_blank">GoaT Link!</a>', id: chatId });
+            addMessage({ role: "user", content: "Webpage Details:\nHere is the JSON curated after parsing the above webpage:\n\n" + JSON.stringify(currentState['api_response']), id: chatId });
             setMessages([...messages]);
             setLoadingSubmit(false);
             break;
@@ -249,7 +249,7 @@ export default function Home() {
         />
         <DialogContent className="flex flex-col space-y-4">
           <DialogHeader className="space-y-2">
-            <DialogTitle>Welcome to Ollama!</DialogTitle>
+            <DialogTitle>Welcome to Goat NLP!</DialogTitle>
             <DialogDescription>
               Enter your name to get started. This is just to personalize your
               experience.
