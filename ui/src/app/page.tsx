@@ -73,7 +73,6 @@ export default function Home() {
 
   useEffect(() => {
     if (env === "production") {
-      console.log("hellloooo")
       const newOllama = new ChatOllama({
         baseUrl: process.env.NEXT_PUBLIC_OLLAMA_URL || "http://localhost:11434",
         model: selectedModel,
