@@ -2,7 +2,7 @@
   "git.ignoreLimitWarning": true,
   "editor.formatOnSave": true,
   "flake8.args": [
-    "--max-line-length=118"
+    "--max-line-length=185"
   ],
   "[python]": {
     "editor.codeActionsOnSave": {

@@ -3,6 +3,8 @@ from llama_index.core.query_pipeline import QueryPipeline as QP
 from agent.component_helpers import (
     construct_query,
     construct_url,
+    define_attribute_condition,
+    html_explanations,
     identify_attributes,
     identify_entity,
     identify_index,
@@ -21,11 +23,13 @@ qp.add_modules(
         "entity": GoatQueryComponent(fn=identify_entity),
         "rank": GoatQueryComponent(fn=identify_rank),
         "intent": GoatQueryComponent(fn=identify_intent),
-        "attribute": GoatQueryComponent(fn=identify_attributes),
+        "attribute": GoatQueryComponent(fn=define_attribute_condition),
+        "attribute_identification": GoatQueryComponent(fn=identify_attributes),
         "time": GoatQueryComponent(fn=identify_time_frame),
         "query": GoatQueryComponent(fn=construct_query),
         "url": GoatQueryComponent(fn=construct_url),
         "record": GoatQueryComponent(fn=identify_record),
+        "html_explanations": GoatQueryComponent(fn=html_explanations),
     }
 )
 
@@ -37,8 +41,7 @@ qp.add_link(
     "record",
     condition_fn=lambda x: x["state"]["intent"]["intent"] == "record",
 )
-qp.add_link(
-    "entity", "rank", condition_fn=lambda x: x["state"]["intent"]["intent"] != "record"
-)
-qp.add_chain(["rank", "attribute", "time", "query", "url"])
+qp.add_link("record", "html_explanations")
+qp.add_link("entity", "rank", condition_fn=lambda x: x["state"]["intent"]["intent"] != "record")
+qp.add_chain(["rank", "attribute_identification", "attribute", "time", "query", "url", "html_explanations"])
 # qp.add_chain(["intent", "index", "entity", "rank", "time", "query", "url"])

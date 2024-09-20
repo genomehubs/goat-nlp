@@ -38,6 +38,41 @@
             padding: 15px 0;
         }
 
+        details details {
+            margin-left: 20px;
+            transition: all 1500ms ease-in-out;
+        }
+
+        details pre {
+            margin-left: 20px;
+            background: rgb(179, 179, 179);
+            padding: 10px;
+            transition: all 1500ms ease-in-out;
+        }
+
+        details {
+            background: gainsboro;
+            padding: 2px;
+        }
+
+        details summary {
+            cursor: pointer;
+            transition: all 1500ms ease-in-out;
+            /* list-style-type: ''; */
+        }
+
+        pre {
+            white-space: pre-wrap;
+            /* Since CSS 2.1 */
+            white-space: -moz-pre-wrap;
+            /* Mozilla, since 1999 */
+            white-space: -pre-wrap;
+            /* Opera 4-6 */
+            white-space: -o-pre-wrap;
+            /* Opera 7 */
+            word-wrap: break-word;
+        }
+
         #chat_log {
             flex: 1;
             padding: 15px;
@@ -105,10 +140,54 @@
                 }
             });
 
+            function createDebugElement(jsonDebug) {
+                const debugElement = document.createElement('details');
+                const summary = document.createElement('summary');
+                summary.textContent = 'Debug';
+                debugElement.appendChild(summary);
+                console.log("hello from outside", jsonDebug)
+
+                for (const key in jsonDebug) {
+                    console.log("hellooooooo")
+                    const detailElement = document.createElement('details');
+                    const detailSummary = document.createElement('summary');
+                    detailSummary.textContent = key;
+                    detailElement.appendChild(detailSummary);
+
+                    const value = jsonDebug[key];
+                    if (typeof value === 'object' && value !== null) {
+                        for (const subKey in value) {
+                            const subDetailElement = document.createElement('details');
+                            const subDetailSummary = document.createElement('summary');
+                            subDetailSummary.textContent = subKey;
+                            subDetailElement.appendChild(subDetailSummary);
+
+                            const subPre = document.createElement('pre');
+                            subPre.textContent = JSON.stringify(value[subKey], undefined, 4);
+                            subDetailElement.appendChild(subPre);
+
+                            detailElement.appendChild(subDetailElement);
+                        }
+                    } else {
+                        const pre = document.createElement('pre');
+                        pre.textContent = JSON.stringify(value, undefined, 4);
+                        detailElement.appendChild(pre);
+                    }
+                    console.log(detailElement)
+                    debugElement.appendChild(detailElement);
+                }
+
+                return debugElement;
+            }
+
             function addMessage(sender, message) {
                 var messageElement;
-                if (sender == 'bot' && message != 'Bot is typing...' && message != 'Sorry, something went wrong.' && message['url'])
-                    messageElement = $('<div class="message ' + sender + '-message"><a href=' + message['url'] + ' target="_blank">GoaT Link!</a><div>' + message['json_debug'] + '</div></div>');
+                if (sender == 'bot' && message != 'Bot is typing...' && message != 'Sorry, something went wrong.' && message['url']) {
+
+                    debug_element = createDebugElement(message['json_debug']);
+                    messageElement = $('<div class="message ' + sender + '-message"><a href=' + message['url'] + ' target="_blank">GoaT Link!</a></div>');
+                    messageElement.append(debug_element);
+                }
                 else
                     messageElement = $('<div class="message ' + sender + '-message"></div>').text(message);
                 $('#chat_log').append(messageElement);
@@ -124,6 +203,7 @@
                 $.ajax({
                     type: 'POST',
                     url: '/chat',
+                    // url: '/chatDebug',
                     data: { user_input: message },
                     success: function (response) {
                         $('.bot-message').last().remove();

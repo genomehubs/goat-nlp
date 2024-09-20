@@ -3,3 +3,5 @@ prompts/__pycache__
 .env
 __pycache__
 src/query_index
+ui/node_modules
+ui/.next

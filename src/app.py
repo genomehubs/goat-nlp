@@ -1,10 +1,15 @@
+import json
 import logging
 import os
+import queue
 import sys
+import threading
+import time
 
 import llama_index.core
 import phoenix as px
-from flask import Flask, render_template, request
+from flask import Flask, Response, render_template, request
+from flask_cors import CORS
 from llama_index.core import Settings
 from llama_index.llms.ollama import Ollama
 from openinference.instrumentation.llama_index import LlamaIndexInstrumentor
@@ -15,7 +20,7 @@ from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from agent.query_pipeline import qp
 
 Settings.llm = Ollama(
-    model="llama3",
+    model=os.getenv("OLLAMA_MODEL_NAME", "llama3.1:8b-instruct-q4_0"),
     base_url=os.getenv("OLLAMA_HOST_URL", "http://127.0.0.1:11434"),
     request_timeout=36000.0,
 )
@@ -29,6 +34,7 @@ tracer_provider.add_span_processor(SimpleSpanProcessor(OTLPSpanExporter(endpoint
 LlamaIndexInstrumentor().instrument(tracer_provider=tracer_provider)
 
 app = Flask("goat_nlp")
+CORS(app)
 
 handler = logging.StreamHandler(sys.stdout)
 handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
@@ -43,18 +49,30 @@ def home():
     return render_template("chat.html")
 
 
-@app.route("/chat", methods=["POST"])
+@app.route("/api/chat", methods=["POST"])
 def chat():
-    # agent.reset()
-    for _ in range(os.getenv("RETRY_LIMIT", 3)):
-        try:
-            # response = agent.chat(request.form["user_input"])
-            response = qp.run(input={"input": request.form["user_input"], "state": {}})
-            logger.info(response)
-            return {"url": str(response["state"]["final_url"]), "json_debug": ""}
-        except Exception:
-            continue
-    return {"url": "", "json_debug": ""}
+    def stream_response(input):
+        for _ in range(os.getenv("RETRY_LIMIT", 3)):
+            state_queue = queue.Queue()
+            current_state = {"done": False, "error": False, "exception": "", "state": ""}
+            t1 = threading.Thread(
+                target=lambda: qp.run(input={"input": input.split("#goat ")[1], "state": {"queue": state_queue}})
+            )
+            t1.start()
+            while True:
+                time.sleep(3)
+                if not state_queue.empty():
+                    temp_state = state_queue.get()
+                    if current_state != temp_state:
+                        print("State change")
+                        current_state = temp_state
+                        yield f"{json.dumps(current_state)}\n\n"
+                        if current_state["done"] or current_state["error"]:
+                            break
+            if current_state["done"]:
+                break
+
+    return Response(stream_response(request.json["user_input"]), mimetype="text/event-stream")
 
 
 if __name__ == "__main__":

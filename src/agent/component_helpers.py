@@ -1,3 +1,4 @@
+import ast
 import json
 import logging
 import os
@@ -11,11 +12,13 @@ from llama_index.core import Settings
 from llama_index.core.output_parsers.utils import extract_json_str
 
 from prompt import (
-    ATTRIBUTE_PROMPT,
+    ATTRIBUTE_CONDITION_PROMPT,
+    ATTRIBUTE_IDENTIFICATION_PROMPT,
     ENTITY_PROMPT,
     INDEX_PROMPT,
     INTENT_PROMPT,
     LINEAGE_PROMPT,
+    MARKDOWN_PROMPT,
     RANK_PROMPT,
     RECORD_PROMPT,
     TIME_PROMPT,
@@ -27,6 +30,7 @@ logger = logging.getLogger("goat_nlp.component_helpers")
 def identify_index(input: str, state: Dict[str, Any]):
     index_response = Settings.llm.complete(INDEX_PROMPT.format(query=input)).text
     state["index"] = json.loads(extract_json_str(index_response))
+    state["status"] = "Identify Index"
 
     if "classification" not in state["index"] or "explanation" not in state["index"]:
         raise ValueError("Invalid response from model at index identification stage.")
@@ -35,6 +39,7 @@ def identify_index(input: str, state: Dict[str, Any]):
 def identify_entity(input: str, state: Dict[str, Any]):
     entity_response = Settings.llm.complete(ENTITY_PROMPT.format(query=input)).text
     state["entity"] = json.loads(extract_json_str(entity_response))
+    state["status"] = "Identify Entity"
 
     if "entities" not in state["entity"] or "explanation" not in state["entity"]:
         raise ValueError("Invalid response from model at entity identification stage.")
@@ -46,6 +51,7 @@ def identify_rank(input: str, state: Dict[str, Any]):
         RANK_PROMPT.format(query=input, results=json.dumps(cleaned_taxons, indent=4))
     ).text
     state["rank"] = json.loads(extract_json_str(rank_response))
+    state["status"] = "Identify Rank"
 
     if "rank" not in state["rank"] or "explanation" not in state["rank"]:
         raise ValueError("Invalid response from model at rank identification stage.")
@@ -56,6 +62,7 @@ def identify_time_frame(input: str, state: Dict[str, Any]):
         TIME_PROMPT.format(query=input, time=datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
     ).text
     state["timeframe"] = json.loads(extract_json_str(time_response))
+    state["status"] = "Identify Time Frame"
 
     if (
         "from_date" not in state["timeframe"]
@@ -68,6 +75,7 @@ def identify_time_frame(input: str, state: Dict[str, Any]):
 def identify_intent(input: str, state: Dict[str, Any]):
     intent_response = Settings.llm.complete(INTENT_PROMPT.format(query=input)).text
     state["intent"] = json.loads(extract_json_str(intent_response))
+    state["status"] = "Identify Intent"
 
     if "intent" not in state["intent"] or "explanation" not in state["intent"]:
         raise ValueError("Invalid response from model at intent identification stage.")
@@ -83,28 +91,70 @@ def attribute_api_call(index: str):
     return response_parsed if response_parsed["status"]["success"] else None
 
 
-def identify_attributes(input: str, state: Dict[str, Any]):
-
+def define_attribute_condition(input: str, state: Dict[str, Any]):
     attributes = attribute_api_call(state["index"]["classification"])
+
+    if state["attribute_identification"]["attributes"] == []:
+        state["attributes"] = {"attributes": [], "explanation": "No attributes identified."}
+        return
+
     cleaned_attributes = [
         {
             "name": name,
-            "description": (attribute["description"] if "description" in attribute else None),
             "constraint": (attribute["constraint"] if "constraint" in attribute else None),
-            "value_metadata": (attribute["value_metadata"] if "value_metadata" in attribute else None),
         }
         for name, attribute in attributes["fields"].items()
+        if name in state["attribute_identification"]["attributes"]
     ]
 
     attribute_response = Settings.llm.complete(
-        ATTRIBUTE_PROMPT.format(
+        ATTRIBUTE_CONDITION_PROMPT.format(
             attribute_metadata=json.dumps(cleaned_attributes, indent=4),
             query=input,
         )
     ).text
     state["attributes"] = json.loads(extract_json_str(attribute_response))
+    state["status"] = "Define Attribute Condition"
 
     if "attributes" not in state["attributes"] or "explanation" not in state["attributes"]:
+        raise ValueError("Invalid response from model at attribute identification stage.")
+
+    for attribute in state["attributes"]["attributes"]:
+        if attribute["attribute"] not in state["attribute_identification"]["attributes"]:
+            state["attributes"]["attributes"].pop(attribute)
+
+
+def identify_attributes(input: str, state: Dict[str, Any]):
+
+    attributes = attribute_api_call(state["index"]["classification"])
+
+    cleaned_attributes = []
+
+    for name, attribute in attributes["fields"].items():
+        cleaned_attribute = {"name": name}
+        description_added = False
+        if "description" in attribute:
+            cleaned_attribute["description"] = attribute["description"]
+            description_added = True
+        if "long_description" in attribute:
+            cleaned_attribute["long_description"] = attribute["long_description"]
+            description_added = True
+        if description_added:
+            cleaned_attributes.append(cleaned_attribute)
+
+    attribute_response = Settings.llm.complete(
+        ATTRIBUTE_IDENTIFICATION_PROMPT.format(
+            attribute_metadata=json.dumps(cleaned_attributes, indent=4),
+            query=input,
+        )
+    ).text
+    state["attribute_identification"] = ast.literal_eval(extract_json_str(attribute_response))
+    state["status"] = "Identify Attributes"
+
+    if (
+        "attributes" not in state["attribute_identification"]
+        or "explanation" not in state["attribute_identification"]
+    ):
         raise ValueError("Invalid response from model at attribute identification stage.")
 
 
@@ -150,10 +200,14 @@ def construct_query(input: str, state: Dict[str, Any]):
             condition = attribute["condition"]
             if condition == "in":
                 query += f'{attribute["attribute"]}({",".join(attribute["value"])}) AND '
+            elif condition == "required":
+                query += f'{attribute["attribute"]} AND '
             else:
                 query += f'{attribute["attribute"]}' + f'{attribute["condition"]}' + f'{attribute["value"]} AND '
 
     query = query.removesuffix(" AND ")
+
+    state["status"] = "Construct Query"
 
     state["query"] = query
 
@@ -161,11 +215,28 @@ def construct_query(input: str, state: Dict[str, Any]):
 def construct_url(input: str, state: Dict[str, Any]):
     base_url = "https://goat.genomehubs.org/"
     endpoint = state["intent"]["intent"] + "?"
-    suffix = f'&result={state["index"]["classification"]}&summaryValues=count&taxonomy=ncbi&offset=0'
-    suffix += "&fields=assembly_level%2Cassembly_span%2Cgenome_size%2Cchromosome_number%2C"
-    suffix += "haploid_number&names=common_name&ranks=&includeEstimates=false&size=100"
-
+    if fields := "%2C".join(state.get("attributes", {}).get("attribute", [])):
+        fields = f"&fields={fields}"
+    include_estimates = str(not state["rank"]["rank"].endswith("species")).lower()
+    suffix = f'&result={state["index"]["classification"]}&taxonomy=ncbi'
+    suffix += f"{fields}&names=common_name&ranks=&includeEstimates={include_estimates}&size=10"
+    state["status"] = "Construct URL"
     state["final_url"] = base_url + endpoint + "query=" + urllib.parse.quote(state["query"]) + suffix
+    state["api_url"] = base_url + "api/v2/" + endpoint + "query=" + urllib.parse.quote(state["query"]) + suffix
+
+    try:
+        response = requests.get(state["api_url"])
+        parsed_response = response.json()
+        if parsed_response["status"]["success"]:
+            if state["intent"]["intent"] == "record":
+                state["api_response"] = parsed_response["records"][0]
+                for attribute_name, attribute in state["api_response"]["attributes"].items():
+                    state["api_response"]["attributes"][attribute_name] = attribute["value"]
+            elif state["intent"]["intent"] == "search":
+                state["api_response"] = parsed_response["results"]
+    except Exception as e:
+        print(str(e))
+        pass
 
 
 def identify_record(input: str, state: Dict[str, Any]):
@@ -178,6 +249,7 @@ def identify_record(input: str, state: Dict[str, Any]):
         RECORD_PROMPT.format(query=input, results=json.dumps(cleaned_taxons, indent=4))
     ).text
     state["record"] = json.loads(extract_json_str(taxon_response))
+    state["status"] = "Identify Record"
 
     if "taxon_id" not in state["record"] or "explanation" not in state["record"]:
         raise ValueError("Invalid response from model at record identification stage.")
@@ -187,6 +259,23 @@ def identify_record(input: str, state: Dict[str, Any]):
         + str(state["record"]["taxon_id"])
         + f"&result={state['index']['classification']}"
     )
+    state["api_url"] = state["final_url"].replace("/record", "/api/v2/record")
+
+    try:
+        response = requests.get(state["api_url"])
+        parsed_response = response.json()
+        if parsed_response["status"]["success"]:
+            if state["intent"]["intent"] == "record":
+                state["api_response"] = parsed_response["records"][0]
+                for attribute_name, attribute in state["api_response"]["record"]["attributes"].items():
+                    state["api_response"]["record"]["attributes"][attribute_name] = (
+                        attribute["value"] if "value" in attribute else ""
+                    )
+            elif state["intent"]["intent"] == "search":
+                state["api_response"] = parsed_response["results"]
+    except Exception as e:
+        print(str(e))
+        pass
 
 
 def query_entity(state: Dict[str, Any], query_operator="tax_name", include_sub_species=True) -> list:
@@ -201,8 +290,12 @@ def query_entity(state: Dict[str, Any], query_operator="tax_name", include_sub_s
             entities += f"* {entity['singular_form']},"
             entities += f"* {entity['plural_form']},"
 
-    query_url = f'{os.getenv("GOAT_BASE_URL")}/search?query={urllib.parse.quote(f"{query_operator}({entities})")}'
+    query_url = (
+        f'{os.getenv("GOAT_BASE_URL")}/search?query={urllib.parse.quote(f"{query_operator}({entities})")}&size=50'
+    )
     query_url += f"&result={state['index']['classification']}"
+
+    state["entity"]["query_url"] = query_url
 
     response = requests.get(query_url)
     response_parsed = response.json()
@@ -218,3 +311,17 @@ def query_entity(state: Dict[str, Any], query_operator="tax_name", include_sub_s
         }
         for res in response_parsed["results"]
     ]
+
+
+def html_explanations(input: str, state: Dict[str, Any]):
+    cleaned_dictionary = state.copy()
+    cleaned_dictionary.pop("queue")
+    cleaned_dictionary.pop("final_url")
+    cleaned_dictionary.pop("status")
+    cleaned_dictionary.pop("api_url")
+    cleaned_dictionary.pop("api_response", None)
+    index_response = Settings.llm.complete(
+        MARKDOWN_PROMPT.format(state_dictionary=json.dumps(cleaned_dictionary, indent=4))
+    ).text
+    state["markdown"] = index_response.replace('"', "'")
+    state["status"] = "Markdown Explanation"

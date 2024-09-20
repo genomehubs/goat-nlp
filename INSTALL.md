@@ -1,4 +1,3 @@
-
 # Installation Guide
 
 This guide provides step-by-step instructions to set up the project after cloning the repository.
@@ -52,7 +51,7 @@ curl -fsSL https://ollama.com/install.sh | sh
 Run the Ollama application:
 
 ```bash
-ollama run codellama
+ollama run llama3.1:8b-instruct-q4_0
 ```
 
 ## Step 7: Start the Flask Application
@@ -67,5 +66,49 @@ export ATTRIBUTE_API_TTL=172800
 python -m flask run
 ```
 
-The UI will be available at `http://localhost:5000/`
+## Step 8: Start the frontend
 
+**Change directory:**
+
+```
+cd ui
+```
+
+**Create a `.env` file:**
+
+```
+NEXT_PUBLIC_OLLAMA_URL="http://127.0.0.1:11434"
+NEXT_GOAT_NLP_BACKEND="http://localhost:5000"
+```
+
+**Install dependencies:**
+
+```
+npm install
+```
+
+**Start the development server:**
+
+```
+npm run dev
+```
+The UI will be available at `http://localhost:3000/`
+
+# Testing guide
+
+Install dev dependencies
+
+```
+pip install -r requirements-dev.txt
+```
+
+Run `pytest`
+
+```
+export OLLAMA_HOST_URL=http://127.0.0.1:11434
+export RETRY_COUNT=5
+export GOAT_BASE_URL=https://goat.genomehubs.org/api/v2
+export ATTRIBUTE_API_TTL=172800
+
+pytest -W ignore::DeprecationWarning -k test_intent_module
+```

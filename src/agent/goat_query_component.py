@@ -22,8 +22,31 @@ class GoatQueryComponent(CustomQueryComponent):
         exception = None
         try:
             self.fn(kwargs["input"]["input"], kwargs["input"]["state"])
+            if kwargs["input"]["state"]["status"] == "Markdown Explanation":
+                kwargs["input"]["state"]["queue"].put(
+                    {
+                        "done": True,
+                        "error": False,
+                        "state": kwargs["input"]["state"]["status"],
+                        "url": kwargs["input"]["state"]["final_url"],
+                        "markdown": kwargs["input"]["state"]["markdown"],
+                        "api_response": kwargs["input"]["state"]["api_response"],
+                    }
+                )
+            else:
+                kwargs["input"]["state"]["queue"].put(
+                    {"done": False, "error": False, "state": kwargs["input"]["state"]["status"]}
+                )
         except Exception as e:
             error = True
+            kwargs["input"]["state"]["queue"].put(
+                {
+                    "done": False,
+                    "error": True,
+                    "exception": kwargs["input"]["state"]["status"] + " step failed with following error: " + str(e),
+                    "state": "error_state",
+                }
+            )
             exception = str(e)
 
         return {
