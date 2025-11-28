@@ -1,14 +1,15 @@
 {
   "git.ignoreLimitWarning": true,
   "editor.formatOnSave": true,
-  "flake8.args": [
-    "--max-line-length=118"
-  ],
+  "flake8.args": ["--max-line-length=118"],
   "[python]": {
     "editor.codeActionsOnSave": {
       "source.organizeImports.python": "explicit"
     },
     "editor.defaultFormatter": "ms-python.black-formatter",
-    "editor.formatOnSave": true,
-  }
+    "editor.formatOnSave": true
+  },
+  "python-envs.defaultEnvManager": "ms-python.python:conda",
+  "python-envs.defaultPackageManager": "ms-python.python:conda",
+  "python-envs.pythonProjects": []
 }
