@@ -62,10 +62,16 @@ async def goat_query_workflow() -> str:
    - Available enum values for keyword attributes
 
 5. Determine whether to search to get a list or count of records based on a query
-   or to fetch details about a specific record. Use get_goat_record for specific records. 
+   or to fetch details about a specific record. Use get_goat_record for specific records.
 
-6. For "both X and Y" queries with keyword attributes, pass them as SEPARATE
-   attribute dicts to create a logical AND. Comma-separated values create OR.
+6. CRITICAL - AND vs OR logic for keyword attributes:
+   - Use SEPARATE attribute dicts for AND ("both X and Y")
+     Example: "both DToL and CANBP" =
+       [{"name": "long_list", "value": "dtol"}, {"name": "long_list", "value": "canbp"}]
+   - Use COMMA-SEPARATED values for OR ("either X or Y")
+     Example: "either DToL or CANBP" = [{"name": "long_list", "value": "dtol,canbp"}]
+   - Keywords: "both", "and", "all of" = AND (separate dicts)
+   - Keywords: "either", "or", "any of" = OR (comma-separated)
 
 7. For a search, call search_goat with:
    - search_index (required, defaults to "taxon")
@@ -265,7 +271,7 @@ def build_query_string(
     query_parts = []
 
     if taxon:
-        query_parts.append(f"tax_tree%28{taxon.replace('*', '%2A').replace(":", "%3A")}%29")
+        query_parts.append(f"tax_tree%28{taxon.replace('*', '%2A').replace(":", "%3A").replace(",", "%2C")}%29")
 
     if rank:
         query_parts.append(f"tax_rank%28{rank}%29")
@@ -478,7 +484,17 @@ async def search_goat(
     For attributes:
     - Include 'operator' and 'value' keys for filtering
     - Valid operators: '=', '!=', '>', '<', '>=', '<='
-    - Keyword attributes: comma-separated values = OR, separate dicts = AND
+
+    CRITICAL - AND vs OR logic:
+    - SEPARATE attribute dicts = logical AND ("both X and Y")
+      Example for "both DToL and CANBP target lists":
+      [{"name": "long_list", "value": "dtol"}, {"name": "long_list", "value": "canbp"}]
+    - COMMA-SEPARATED values in ONE dict = logical OR ("either X or Y")
+      Example for "either DToL or CANBP target lists":
+      [{"name": "long_list", "value": "dtol,canbp"}]
+    - User keywords indicating AND: "both", "and", "all of", "in both", "on both"
+    - User keywords indicating OR: "either", "or", "any of", "in any"
+
     - Taxon names: comma-separated names = OR
     - Prefix values with '!' for NOT. Works with keyword attributes and taxon names.
     - If the only value(s) for a keyword attribute is negated (e.g., '!value'),
@@ -523,7 +539,7 @@ async def search_goat(
     data = await make_goat_request(url)
 
     if not data or "count" not in data:
-        return "Unable to fetch count or no count found."
+        return f"Unable to fetch count or no count found for URL: {url}."
 
     # Format response based on what was queried
     count = data.get("count", 0)
