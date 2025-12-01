@@ -43,77 +43,87 @@ async def goat_query_workflow() -> str:
     """System prompt describing the proper workflow for querying GoaT."""
     return """When answering questions about genomic data using GoaT tools:
 
-1. ALWAYS check attribute availability first using get_attribute_selection_context
-   with relevant keywords before calling get_conditional_count.
+1. Determine the appropriate search_index:
+   - "taxon" (default): for questions about species, genera, families, etc.
+   - "assembly": for questions specifically about genome assemblies
+   - "sample": for questions specifically about sequencing samples
 
-2. Extract keywords from the user's question (e.g., "assembly", "sequencing",
+2. If using attribute filters, ALWAYS check attribute availability first using
+   get_attribute_selection_context with relevant keywords and the chosen
+   search_index before calling search_goat.
+
+3. Extract keywords from the user's question (e.g., "assembly", "sequencing",
    "target list", "genome size") and use them to find appropriate attributes.
 
-3. Review the returned attributes to select the most appropriate ones based on:
+4. Review the returned attributes to select the most appropriate ones based on:
    - The attribute name and description
    - The display_group (e.g., assembly, genome_size, sequencing)
    - The attribute type (keyword, half_float, etc.)
    - Available enum values for keyword attributes
 
-4. For "both X and Y" queries with keyword attributes, pass them as SEPARATE
+5. For "both X and Y" queries with keyword attributes, pass them as SEPARATE
    attribute dicts to create a logical AND. Comma-separated values create OR.
 
-5. Only after confirming attributes exist, use get_conditional_count with the
-   selected attributes.
+6. Call search_goat with:
+   - search_index (required, defaults to "taxon")
+   - taxon (optional): to scope by taxonomy
+   - rank (optional): to filter by taxonomic rank
+   - attributes (optional): to filter by other criteria
+   All filters are optional and can be combined as needed.
 
-6. Always include the GoaT web interface URL in your response for exploration."""
+7. Always include the GoaT web interface URL in your response for exploration."""
 
 
-async def _fetch_valid_types(index: str = "taxon") -> dict[str, Any]:
+async def _fetch_valid_types(search_index: str = "taxon") -> dict[str, Any]:
     """Internal function to fetch valid attribute types from GoaT API.
 
     Uses in-memory cache with 24-hour TTL to avoid repeated API calls.
 
     Args:
-        index: Index type (default: taxon)
+        search_index: Index type (default: taxon)
     """
     # Check if we have a valid cached response
     current_time = time.time()
-    if index in _FIELD_CACHE and index in _CACHE_TIMESTAMP:
-        cache_age = current_time - _CACHE_TIMESTAMP[index]
+    if search_index in _FIELD_CACHE and search_index in _CACHE_TIMESTAMP:
+        cache_age = current_time - _CACHE_TIMESTAMP[search_index]
         if cache_age < CACHE_TTL_SECONDS:
-            return _FIELD_CACHE[index]
+            return _FIELD_CACHE[search_index]
 
     # Cache miss or expired - fetch from API
-    url = f"{GOAT_API_BASE}/resultFields?index={index}"
+    url = f"{GOAT_API_BASE}/resultFields?index={search_index}"
     data = await make_goat_request(url)
     if not data or "fields" not in data:
         return {}
 
     # Store in cache
     fields = data["fields"]
-    _FIELD_CACHE[index] = fields
-    _CACHE_TIMESTAMP[index] = current_time
+    _FIELD_CACHE[search_index] = fields
+    _CACHE_TIMESTAMP[search_index] = current_time
 
     return fields
 
 
 @mcp.tool()
-async def get_valid_types(index: str = "taxon") -> dict[str, Any]:
+async def get_valid_types(search_index: str = "taxon") -> dict[str, Any]:
     """Fetch valid attribute types from GoaT API.
 
     Args:
-        index: Index type (default: taxon)
+        search_index: Index type (default: taxon)
     """
-    return await _fetch_valid_types(index)
+    return await _fetch_valid_types(search_index)
 
 
 @mcp.tool()
 async def get_metadata_for_attribute(
-    attribute: str, index: str = "taxon"
+    attribute: str, search_index: str = "taxon"
 ) -> dict[str, Any]:
     """Get metadata for a specific attribute in GoaT.
 
     Args:
         attribute: Name of the attribute to get metadata for
-        index: Index type (default: taxon)
+        search_index: Index type (default: taxon)
     """
-    fields = await _fetch_valid_types(index)
+    fields = await _fetch_valid_types(search_index)
     if not fields:
         return {}
 
@@ -124,24 +134,37 @@ async def get_metadata_for_attribute(
 
 
 async def _get_attribute_context_internal(
-    keyword: str, index: str = "taxon"
+    keyword: str, search_index: str = "taxon"
 ) -> dict[str, Any]:
     """Internal function to get attribute selection context.
 
     This is called by both the resource and the tool.
     """
-    fields = await _fetch_valid_types(index)
+    fields = await _fetch_valid_types(search_index)
     if not fields:
         return {}
 
+    # Split keyword into individual words for matching
+    keyword_lower = keyword.lower()
+    keyword_words = set(keyword_lower.split())
+
     attributes = []
     for name, field in fields.items():
-        if (
-            keyword.lower() in name.lower()
-            or keyword.lower() in field.get("description", "").lower()
-            or keyword.lower() in field.get("long_description", "").lower()
-        ):
-            # Include the field name with the metadata
+        # Get searchable text fields
+        name_lower = name.lower()
+        description = field.get("description", "").lower()
+        long_description = field.get("long_description", "").lower()
+        display_group = field.get("display_group", "").lower()
+        
+        # Create combined search text
+        search_text = f"{name_lower} {description} {long_description} {display_group}"
+        
+        # Check for complete phrase match first (higher priority)
+        if keyword_lower in search_text:
+            attr_info = {"name": name, **field}
+            attributes.append(attr_info)
+        # If no phrase match, check if any individual words match
+        elif keyword_words and any(word in search_text for word in keyword_words if len(word) > 2):
             attr_info = {"name": name, **field}
             attributes.append(attr_info)
 
@@ -162,7 +185,7 @@ async def _get_attribute_context_internal(
 
 @mcp.tool()
 async def get_attribute_selection_context(
-    keyword: str, index: str = "taxon"
+    keyword: str, search_index: str = "taxon"
 ) -> dict[str, Any]:
     """Get context information for attribute selection.
 
@@ -172,9 +195,9 @@ async def get_attribute_selection_context(
 
     Args:
         keyword: Keyword to guide attribute selection
-        index: Index type (default: taxon)
+        search_index: Index type (default: taxon)
     """
-    return await _get_attribute_context_internal(keyword, index)
+    return await _get_attribute_context_internal(keyword, search_index)
 
 
 async def make_goat_request(url: str) -> dict[str, Any] | None:
@@ -224,29 +247,32 @@ Explore these results in the GOAT web interface:
 """
 
 
-@mcp.tool()
-async def get_count(taxon: str, rank: str) -> str:
-    """Get count for a GoaT query.
-
-    An LLM can use this tool to get counts of genomes or taxa
-    within a specified taxon and rank. When summarising the results, an LLM
-    should include a link to the UI search page for further exploration.
+def build_query_string(
+    taxon: str | None = None,
+    rank: str | None = None,
+    attributes: list[dict] | None = None,
+) -> str:
+    """Build a GoaT query string from optional components.
 
     Args:
-        taxon: scientific name or taxon ID of the organism
-        rank: taxonomic rank to get counts for (e.g. species, genus)
+        taxon: Optional taxonomic scope
+        rank: Optional rank filter
+        attributes: Optional attribute filters
     """
-    url = (
-        f"{GOAT_API_BASE}/count?query=tax_tree%28{taxon}%29%20AND%20"
-        f"tax_rank%28{rank}%29&result=taxon&offset=0&"
-        f"includeEstimates=true&taxonomy=ncbi"
-    )
-    data = await make_goat_request(url)
+    query_parts = []
 
-    if not data or "count" not in data:
-        return "Unable to fetch count or no count found."
+    if taxon:
+        query_parts.append(f"tax_tree%28{taxon.replace('*', '%2A').replace(":", "%3A")}%29")
 
-    return format_count(data, taxon, rank, url)
+    if rank:
+        query_parts.append(f"tax_rank%28{rank}%29")
+
+    if attributes:
+        if attr_string := format_attributes(attributes):
+            # Remove leading %20AND%20
+            query_parts.append(attr_string.replace("%20AND%20", "", 1))
+
+    return "%20AND%20".join(query_parts) if query_parts else ""
 
 
 def format_attributes(attributes: list[dict]) -> str:
@@ -272,57 +298,179 @@ def format_attributes(attributes: list[dict]) -> str:
     return ""
 
 
-@mcp.tool()
-async def get_conditional_count(taxon: str, rank: str, attributes: list[dict]) -> str:
-    """Get count for a GoaT query with attribute filters.
-
-    IMPORTANT: Before using this tool, you MUST first call
-    get_attribute_selection_context with relevant keywords from the user's
-    query to discover and validate available attributes.
-
-    The LLM MUST use the attribute selection context tool to choose
-    appropriate attributes to filter by based on the user query.
-    If the query suggests filtering based on the attribute values, the LLM
-    should include the 'operator' and 'value' keys in each attribute dict.
-    Valid operators are '=', '!=', '>', '<', '>=', '<='. If no operator
-    or value is provided, the attribute will be included without filtering.
-
-    For keyword attributes, a list of comma separated values may be passed
-    as the value, this will be treated as a logical OR. Alternatively, one
-    or more values in the list may be prefixed with '!' to indicate logical
-    NOT. Passing the same keyword attribute more than once with different
-    values is supported and will be treated as logical AND.
-
-    Values for any keyword with an enum should be chosen from the
-    valid enum values, a list of descriptions may be available in the
-    value_metadata section of the attribute metadata, which can be used to
-    help match user supplied values with valid values. If the attribute has
-    an enum summary, the values are sortable so comparison operators can be
-    used.
-
-    When summarizing results, the LLM MUST include the GOAT web interface
-    URL provided in the response to allow users to explore the full dataset.
+def set_exclusions(attributes: list[dict] | None) -> str:
+    """Determine exclusion filters based on attribute status.
 
     Args:
-        taxon: scientific name or taxon ID of the organism
-        rank: taxonomic rank to get counts for (e.g. species, genus)
-        attributes: list of attributes to filter by
-            (e.g. assembly_level or genome_size).
-            Each attribute should be a dict with 'name' and optional
-            'operator' and 'value' keys.
+        attributes: List of attribute filters
     """
-    url = (
-        f"{GOAT_API_BASE}/count?query=tax_tree%28{taxon}%29%20AND%20"
-        f"tax_rank%28{rank}%29{format_attributes(attributes)}&result=taxon&"
-        f"offset=0&"
-        f"includeEstimates=true&taxonomy=ncbi"
-    )
+    exclude_statuses = {}
+
+    if not attributes:
+        return ""
+
+    for attr in attributes:
+        if "exclude" in attr:
+            for status in attr["exclude"]:
+                if f"exclude{status}" not in exclude_statuses:
+                    exclude_statuses[f"exclude{status}"] = []
+                exclude_statuses[f"exclude{status}"].append(attr["name"])
+
+    exclusion_str = ""
+    for key, values in exclude_statuses.items():
+        for i, value in enumerate(values):
+            exclusion_str += f"&{key}%5B{i}%5D={value}"
+
+    if exclusion_str:
+        exclusion_str = f"&{exclusion_str}"
+
+    return exclusion_str
+
+
+@mcp.tool()
+async def search_goat(
+    search_index: str = "taxon",
+    taxon: str | None = None,
+    rank: str | None = None,
+    attributes: list[dict] | None = None,
+) -> str:
+    """Search GoaT and get a count of matching records.
+
+    This is the primary search tool for querying GoaT. All parameters except
+    search_index are optional, allowing flexible queries.
+
+    IMPORTANT: If using attributes, you MUST first call
+    get_attribute_selection_context with relevant keywords to discover
+    and validate available attributes for the chosen search_index.
+
+    Query Types by search_index:
+    - taxon (default): Query taxonomic data
+        * Can use: taxon, rank, and/or attributes
+        * Examples: "species in Mammalia", "families with assemblies"
+    - assembly: Query genome assemblies
+        * Can use: taxon, and/or attributes (rank less common)
+        * Examples: "assemblies with chromosome-level quality"
+    - sample: Query sequencing samples
+        * Can use: taxon, and/or attributes (rank less common)
+        * Examples: "samples with RNA-seq data"
+
+    For taxon:
+    - Use taxon to scope by taxonomic name or ID
+    - Partial taxon names or IDs are supported using the wildcard *.
+    - Several name classes are supported (scientific name, synonym,
+        common name, tolid prefix, etc.) and can be specified using a
+        `name class:` prefix, e.g., 'common name:dog'.
+
+    For attributes:
+    - Include 'operator' and 'value' keys for filtering
+    - Valid operators: '=', '!=', '>', '<', '>=', '<='
+    - Keyword attributes: comma-separated values = OR, separate dicts = AND
+    - Prefix values with '!' for NOT
+    - If the only value(s) for a keyword attribute is negated (e.g., '!value'),
+        the LLM MUST set 'null' as an additional value to include records
+        where the attribute is missing.
+    - Use enum values from attribute metadata when available. If a user query
+        implies a specific value that is not in the enum, the LLM should use the
+        value_metadata from the attribute context to infer the correct value. If
+        no value can be found that matches the enum, the LLM MUST inform the user.
+    - The LLM must only infer the presence/absence of an attribute using a name
+        only and leaving 'operator' and 'value' blank. Testing using value > 0 is
+        ONLY allowed if the user query explicitly states so.
+    - For the taxon index only, attribute status can be "Direct", "Descendant",
+        "Ancestral", or "Missing". If a user query implies a specific status,
+        the LLM MUST set an 'exclude'key for filtering where the
+        value is the list of statuses to exclude. For queries based
+        on the presence of an attribute, the LLM MUST use 'exclude': ['Ancestral',
+        'Missing'] to ensure only records with direct or descendant data are counted.
+
+    When summarizing results, MUST include the GoaT web interface URL.
+
+    Args:
+        search_index: Index to search (taxon, assembly, or sample)
+        taxon: Optional taxonomic scope (scientific name, taxon ID, etc.)
+        rank: Optional taxonomic rank filter (e.g., species, genus)
+        attributes: Optional list of attribute filters, each with 'name'
+            and optional 'operator', 'value', 'exclude' and 'include' keys
+    """
+    query_string = build_query_string(taxon, rank, attributes)
+    exclusions = set_exclusions(attributes)
+
+    if query_string:
+        url = (
+            f"{GOAT_API_BASE}/count?query={query_string}"
+            f"&result={search_index}&offset=0&includeEstimates=true&taxonomy=ncbi"
+            f"{exclusions}"
+        )
+    else:
+        # Empty query - count all records in index
+        url = f"{GOAT_API_BASE}/count?result={search_index}&offset=0&includeEstimates=true&taxonomy=ncbi"
+
     data = await make_goat_request(url)
 
     if not data or "count" not in data:
         return "Unable to fetch count or no count found."
 
-    return format_count(data, taxon, rank, url)
+    # Format response based on what was queried
+    count = data.get("count", 0)
+    search_url = url.replace("/api/v2", "").replace("count?", "search?")
+    search_url += "&size=10&report=sources"
+
+    if taxon and rank:
+        description = f"{count} {rank_description(rank)} within {taxon}"
+    elif taxon:
+        description = f"{count} records within {taxon}"
+    elif rank:
+        description = f"{count} {rank_description(rank)}"
+    else:
+        index_name = {"taxon": "taxa", "assembly": "assemblies", "sample": "samples"}.get(
+            search_index, "records"
+        )
+        description = f"{count} {index_name}"
+
+    if attributes:
+        description += " matching the specified attributes"
+
+    return f"""
+According to {GOAT_DESCRIPTION}, there are {description}.
+
+This count is based on data from the NCBI taxonomy,
+supplemented by additional metadata from the GoaT database.
+
+Explore these results in the GOAT web interface:
+{search_url}
+"""
+
+
+@mcp.tool()
+async def choose_search_index(keywords: str) -> str:
+    """Choose the appropriate GoaT search index.
+
+    GoaT supports multiple search indices:
+    - taxon: for taxonomic queries (default)
+        e.g. if the user asks about species, genera, families, etc.
+    - assembly: for assembly-level queries
+        e.g. if the user asks directly about counts or lists of genome
+        assemblies, or asks about assembly quality, assembly levels, etc.
+        and does not refer to taxa.
+    - sample: for sample-level queries
+        e.g. if the user asks about directly about counts or lists of
+        samples, or asks about sequencing runs, raw data, samples, etc.
+        and does not refer to taxa or assemblies.
+
+    An LLM can use this tool to select the appropriate index based on
+    the user's question. The LLM should choose keywords to describe the
+    search index from the full user query. If appropriate attributes are
+    not available for the first search index, the LLM may try another.
+    If in doubt, the LLM should default to 'taxon'.
+
+    Args:
+        keywords: Keywords extracted from the user's question
+    """
+    if any(kw in keywords.lower() for kw in ["assembly", "assemblies", "genome", "genomes"]):
+        return "assembly"
+    if any(kw in keywords.lower() for kw in ["sample", "samples"]):
+        return "sample"
+    return "taxon"
 
 
 @mcp.tool()
@@ -332,6 +480,9 @@ async def check_taxon_exists(name: str) -> dict:
     Use this to validate taxonomic names that the LLM has identified or
     translated from common names. The LLM should handle the translation
     from common names (like 'dog') to scientific names (like 'Canis').
+
+    The returned dict includes a query_string, which can be used to include
+    the taxon in subsequent GoaT queries.
 
     Args:
         name: Scientific taxon name to check (e.g. 'Canis', 'Felidae', etc.)
@@ -378,6 +529,7 @@ async def check_taxon_exists(name: str) -> dict:
         "scientific_name": name,
         "rank": rank,
         "taxon_id": taxon_id,
+        "query_string": f"{taxon_id}[{name}]",
         "count_in_goat": data["count"],
     }
 
