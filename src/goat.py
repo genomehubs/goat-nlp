@@ -447,21 +447,121 @@ async def get_goat_record(
     return format_record(data["records"][0]["record"], url, attributes, truncate)
 
 
+def format_result_table(
+    results: list[dict],
+    search_fields: list[str],
+    search_url: str,
+) -> str:
+    """Format search results as a markdown table with context.
+
+    Args:
+        results: List of result records
+        search_fields: List of fields to include in the table
+        search_url: GoaT web interface URL
+
+    Returns:
+        Formatted markdown string with summary and table
+    """
+    if not results:
+        return f"No results found.\n\nExplore in GoaT: {search_url}"
+
+    columns = []
+
+    # Build rows
+    rows = []
+    flags = 0
+    for result in results:
+        record = result.get("result", {})
+        row_values = []
+        if not columns:
+            # Determine columns from first record
+            columns.extend(key for key in record.keys() if key.endswith("_id"))
+            if record.get("scientific_name") is not None:
+                columns.append("scientific_name")
+            if record.get("taxon_rank") is not None:
+                columns.append("taxon_rank")
+            if "fields" in record:
+                columns.extend(record["fields"].keys())
+            if search_fields:
+                # Ensure requested fields are included
+                for field in search_fields:
+                    if field not in columns:
+                        columns.append(field)
+            # Build header
+            header = "| " + " | ".join(columns) + " |"
+            separator = "| " + " | ".join(["---"] * len(columns)) + " |"
+
+        fields = record.get("fields", {})
+        for col in columns:
+            flag = False
+            # Handle different field types
+            if record.get(col) is not None:
+                value = record.get(col)
+            elif col in fields and fields[col] is not None:
+                attr_value = fields[col].get("value", "N/A")
+                if "ancestor" in fields[col].get("aggregation_source", []):
+                    flag = True
+                    flags += 1
+                # Format lists concisely
+                if isinstance(attr_value, list):
+                    value = (
+                        f"{', '.join(str(v) for v in attr_value[:3])}... (+{len(attr_value) - 3})"
+                        if len(attr_value) > 3
+                        else ", ".join(str(v) for v in attr_value)
+                    )
+                else:
+                    value = str(attr_value)
+            else:
+                value = "N/A"
+
+            # Truncate long values
+            if len(str(value)) > 50:
+                value = f"{str(value)[:47]}..."
+
+            if flag:
+                value += " (Ancestral)"
+
+            row_values.append(str(value))
+
+        rows.append("| " + " | ".join(row_values) + " |")
+
+    # Assemble table
+    table = "\n".join([header, separator] + rows)
+    flag_note = (
+        "\n\n(Note: Values marked with '(Ancestral)' are inferred from ancestral data.)"
+        if flags > 0
+        else ""
+    )
+    return f"""Here are the top results:
+{table}{flag_note}
+"""
+
+
 @mcp.tool()
 async def search_goat(
     search_index: str = "taxon",
     taxon: str | None = None,
     rank: str | None = None,
     attributes: list[dict] | None = None,
+    fields: list[str] | None = None,
+    sort_by: str | None = None,
+    sort_order: str | None = None,
+    show_table: bool = False,
+    size: int = 5,
 ) -> str:
-    """Search GoaT and get a count of matching records.
+    """Search GoaT and get a count or table of matching records.
 
     This is the primary search tool for querying GoaT. All parameters except
     search_index are optional, allowing flexible queries.
 
-    IMPORTANT: If using attributes, you MUST first call
+    IMPORTANT: If using attributes or fields, you MUST first call
     get_attribute_selection_context with relevant keywords to discover
     and validate available attributes for the chosen search_index.
+
+    IMPORTANT: sort_by must be a valid attribute name for the chosen search_index
+    or scientific_name, taxon_id, taxon_rank or *_id. If using sort_by with an
+    attribute name not included in fields or attributes, you MUST first call
+    get_attribute_selection_context to validate the attribute.
 
     Query Types by search_index:
     - taxon (default): Query taxonomic data
@@ -514,7 +614,8 @@ async def search_goat(
         on the presence of an attribute, the LLM MUST use 'exclude': ['Ancestral',
         'Missing'] to ensure only records with direct or descendant data are counted.
 
-    When summarizing results, the LLM MUST include the GoaT web interface URL.
+    When summarizing results or presenting a table, the LLM MUST include the GoaT
+    web interface URL.
 
     Args:
         search_index: Index to search (taxon, assembly, or sample)
@@ -522,29 +623,49 @@ async def search_goat(
         rank: Optional taxonomic rank filter (e.g., species, genus)
         attributes: Optional list of attribute filters, each with 'name'
             and optional 'operator', 'value', 'exclude' and 'include' keys
+        fields: Optional list of fields to include in the response. If not provided,
+            default fields are included.
+        sort_by: Optional attribute name to sort results by
+        sort_order: Optional sort order ('asc' or 'desc', default: 'asc')
+        show_table: Whether to show results in a table format (default: False shows count)
+        table_rows: Number of rows to include in the table if show_table is True (default: 5)
     """
     query_string = build_query_string(taxon, rank, attributes)
     exclusions = set_exclusions(attributes)
 
+    endpoint = "search" if show_table else "count"
+
     if query_string:
         url = (
-            f"{GOAT_API_BASE}/count?query={query_string}"
+            f"{GOAT_API_BASE}/{endpoint}?query={query_string}"
             f"&result={search_index}&offset=0&includeEstimates=true&taxonomy=ncbi"
             f"{exclusions}"
         )
     else:
-        # Empty query - count all records in index
-        url = f"{GOAT_API_BASE}/count?result={search_index}&offset=0&includeEstimates=true&taxonomy=ncbi"
+        # Empty query - count/show all records in index
+        url = f"{GOAT_API_BASE}/{endpoint}?result={search_index}&offset=0&includeEstimates=true&taxonomy=ncbi"
+
+    url += f"&size={size}&report=sources"
+    if fields:
+        url += "&fields=" + "%2C".join(fields)
+    if sort_by:
+        url += f"&sortBy={sort_by}"
+        if sort_order and sort_order.lower() in ["asc", "desc"]:
+            url += f"&sortOrder={sort_order.lower()}"
 
     data = await make_goat_request(url)
 
-    if not data or "count" not in data:
-        return f"Unable to fetch count or no count found for URL: {url}."
-
     # Format response based on what was queried
-    count = data.get("count", 0)
-    search_url = url.replace("/api/v2", "").replace("count?", "search?")
-    search_url += "&size=10&report=sources"
+    if show_table:
+        if not data or "results" not in data:
+            return f"Unable to fetch results or no results found for URL: {url}."
+        count = data.get("status", {}).get("hits", 0)
+        search_url = url.replace("/api/v2", "")
+    else:
+        if not data or "count" not in data:
+            return f"Unable to fetch count or no count found for URL: {url}."
+        count = data.get("count", 0)
+        search_url = url.replace("/api/v2", "").replace("count?", "search?")
 
     if taxon and rank:
         description = f"{count} {rank_description(rank)} within {taxon}"
@@ -561,11 +682,21 @@ async def search_goat(
     if attributes:
         description += " matching the specified attributes"
 
+    table = ""
+    if show_table and "results" in data:
+        table = format_result_table(
+            data["results"],
+            search_fields=fields or [],
+            search_url=search_url,
+        )
+
     return f"""
 According to {GOAT_DESCRIPTION}, there are {description}.
 
 This count is based on data from the NCBI taxonomy,
 supplemented by additional metadata from the GoaT database.
+
+{table}
 
 Explore these results in the GOAT web interface:
 {search_url}

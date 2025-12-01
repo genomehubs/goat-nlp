@@ -43,3 +43,7 @@ Try a query:
 - what are the bioprojects for bats?
   - can you get me a list of all the bioprojects?
 - what is the lineage for the banded snail?
+- how many assemblies are there for species in the cat and dog families?
+- show me a table of contig and scaffold n50 for all cat assemblies, sorted by contig n50
+- can you give me a table of genome size and chromosome count for the nematode groups shown in this tree [context](https://media.springernature.com/lw1200/springer-static/image/art%3A10.1186%2Fs12862-019-1444-x/MediaObjects/12862_2019_1444_Fig4_HTML.png)
+- give me a table of current sequencing status for species on both the CANBP and DTOL lists
