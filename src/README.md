@@ -30,8 +30,8 @@ connect with copilot (uses repository `mcp.json` file)
 
 Try a query:
 
-- how many species are in goat? - correct
-- which species are on both the DToL and CANBP long lists? - close
+- how many species are in goat?
+- which species are on both the DToL and CANBP long lists?
 - which species with chromosomal or better assemblies have over 10Mb contiguity?
 - what about for scaffold n50?
 - how many bat families are targeted by the vgp?

@@ -38,6 +38,32 @@ async def get_goat_description() -> str:
     return GOAT_DESCRIPTION
 
 
+@mcp.prompt()
+async def goat_query_workflow() -> str:
+    """System prompt describing the proper workflow for querying GoaT."""
+    return """When answering questions about genomic data using GoaT tools:
+
+1. ALWAYS check attribute availability first using get_attribute_selection_context
+   with relevant keywords before calling get_conditional_count.
+
+2. Extract keywords from the user's question (e.g., "assembly", "sequencing",
+   "target list", "genome size") and use them to find appropriate attributes.
+
+3. Review the returned attributes to select the most appropriate ones based on:
+   - The attribute name and description
+   - The display_group (e.g., assembly, genome_size, sequencing)
+   - The attribute type (keyword, half_float, etc.)
+   - Available enum values for keyword attributes
+
+4. For "both X and Y" queries with keyword attributes, pass them as SEPARATE
+   attribute dicts to create a logical AND. Comma-separated values create OR.
+
+5. Only after confirming attributes exist, use get_conditional_count with the
+   selected attributes.
+
+6. Always include the GoaT web interface URL in your response for exploration."""
+
+
 async def _fetch_valid_types(index: str = "taxon") -> dict[str, Any]:
     """Internal function to fetch valid attribute types from GoaT API.
 
@@ -67,7 +93,7 @@ async def _fetch_valid_types(index: str = "taxon") -> dict[str, Any]:
     return fields
 
 
-@mcp.resource("resource://goat/valid_types/{index}")
+@mcp.tool()
 async def get_valid_types(index: str = "taxon") -> dict[str, Any]:
     """Fetch valid attribute types from GoaT API.
 
@@ -77,7 +103,7 @@ async def get_valid_types(index: str = "taxon") -> dict[str, Any]:
     return await _fetch_valid_types(index)
 
 
-@mcp.resource("resource://goat/metadata_for_attribute/{attribute}/{index}")
+@mcp.tool()
 async def get_metadata_for_attribute(
     attribute: str, index: str = "taxon"
 ) -> dict[str, Any]:
@@ -134,14 +160,14 @@ async def _get_attribute_context_internal(
     }
 
 
-@mcp.resource("resource://goat/attribute_selection_context/{keyword}/{index}")
+@mcp.tool()
 async def get_attribute_selection_context(
     keyword: str, index: str = "taxon"
 ) -> dict[str, Any]:
     """Get context information for attribute selection.
 
-    An LLM should use this to choose appropriate attributes to filter by
-    based on a user query. The LLM should always check whether an attribute
+    An LLM MUST use this to choose appropriate attributes to filter by
+    based on a user query. The LLM MUST always check whether an attribute
     exists before using it in a query.
 
     Args:
@@ -250,7 +276,11 @@ def format_attributes(attributes: list[dict]) -> str:
 async def get_conditional_count(taxon: str, rank: str, attributes: list[dict]) -> str:
     """Get count for a GoaT query with attribute filters.
 
-    The LLM should use the attribute selection context tool to choose
+    IMPORTANT: Before using this tool, you MUST first call
+    get_attribute_selection_context with relevant keywords from the user's
+    query to discover and validate available attributes.
+
+    The LLM MUST use the attribute selection context tool to choose
     appropriate attributes to filter by based on the user query.
     If the query suggests filtering based on the attribute values, the LLM
     should include the 'operator' and 'value' keys in each attribute dict.
@@ -260,7 +290,8 @@ async def get_conditional_count(taxon: str, rank: str, attributes: list[dict]) -
     For keyword attributes, a list of comma separated values may be passed
     as the value, this will be treated as a logical OR. Alternatively, one
     or more values in the list may be prefixed with '!' to indicate logical
-    NOT.
+    NOT. Passing the same keyword attribute more than once with different
+    values is supported and will be treated as logical AND.
 
     Values for any keyword with an enum should be chosen from the
     valid enum values, a list of descriptions may be available in the
@@ -357,7 +388,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
-    main()
-    main()
     main()
