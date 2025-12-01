@@ -61,17 +61,20 @@ async def goat_query_workflow() -> str:
    - The attribute type (keyword, half_float, etc.)
    - Available enum values for keyword attributes
 
-5. For "both X and Y" queries with keyword attributes, pass them as SEPARATE
+5. Determine whether to search to get a list or count of records based on a query
+   or to fetch details about a specific record. Use get_goat_record for specific records. 
+
+6. For "both X and Y" queries with keyword attributes, pass them as SEPARATE
    attribute dicts to create a logical AND. Comma-separated values create OR.
 
-6. Call search_goat with:
+7. For a search, call search_goat with:
    - search_index (required, defaults to "taxon")
    - taxon (optional): to scope by taxonomy
    - rank (optional): to filter by taxonomic rank
    - attributes (optional): to filter by other criteria
    All filters are optional and can be combined as needed.
 
-7. Always include the GoaT web interface URL in your response for exploration."""
+8. Always include the GoaT web interface URL in your response for exploration."""
 
 
 async def _fetch_valid_types(search_index: str = "taxon") -> dict[str, Any]:
@@ -155,10 +158,10 @@ async def _get_attribute_context_internal(
         description = field.get("description", "").lower()
         long_description = field.get("long_description", "").lower()
         display_group = field.get("display_group", "").lower()
-        
+
         # Create combined search text
         search_text = f"{name_lower} {description} {long_description} {display_group}"
-        
+
         # Check for complete phrase match first (higher priority)
         if keyword_lower in search_text:
             attr_info = {"name": name, **field}
@@ -327,6 +330,117 @@ def set_exclusions(attributes: list[dict] | None) -> str:
     return exclusion_str
 
 
+def format_lineage(lineage: list[dict]) -> str:
+    """Format a taxonomic lineage into a readable string."""
+    lineage_parts = []
+    for taxon in reversed(lineage):
+        name = taxon.get("scientific_name", "Unknown")
+        rank = taxon.get("taxon_rank")
+        anc_str = name
+        if rank is not None:
+            anc_str += f" ({rank})"
+        lineage_parts.append(anc_str)
+    return " > ".join(lineage_parts)
+
+
+def format_attribute_value(name: str, attribute: dict, truncate: bool = True) -> str:
+    """Format a single attribute value into a readable string."""
+    value = attribute.get("value")
+    summary = attribute.get("summary")
+    min_value = attribute.get("min")
+    max_value = attribute.get("max")
+    aggregation_source = attribute.get("aggregation_source")
+    if isinstance(value, list):
+        attr_len = len(value)
+        if truncate and attr_len > 10:
+            last_item = value[-1] if attr_len > 0 else ""
+            value = ", ".join(str(v) for v in value[:10])  # Limit to first 10 values
+            more = attr_len - 10
+            value += f", {last_item}" if (more == 1) else f", ... ({more} more)"
+        else:
+            value = ", ".join(str(v) for v in value)
+    attr_str = f"{name}: {value}"
+    if summary is not None:
+        attr_str += f" (Summary: {summary})"
+    if min_value is not None and max_value is not None and min_value != max_value:
+        attr_str += f" (Range: {min_value}-{max_value})"
+    if aggregation_source is not None:
+        attr_str += f" (Source: {aggregation_source})"
+    return attr_str
+
+
+def format_record(record: dict, url: str, attributes: list[str] | None = None, truncate: bool = True) -> str:
+    """Format a GoaT record into a readable string."""
+    lineage_str = format_lineage(record.get("lineage", []))
+
+    lines = [
+        f"Scientific Name: {record.get('scientific_name', 'Unknown')}",
+        f"Taxon ID: {record.get('taxon_id', 'Unknown')}",
+        f"Rank: {record.get('taxon_rank', 'Unknown')}",
+        f"GoaT URL: {url.replace('/api/v2', '')}",
+        f"Lineage: {lineage_str}"
+        ]
+
+    for attr_name, attr in record.get("attributes", {}).items():
+        if attributes is None or attr_name in attributes:
+            lines.append(format_attribute_value(attr_name, attr, truncate=truncate))
+    return "\n".join(lines)
+
+
+@mcp.tool()
+async def get_goat_record(
+    record_id: str,
+    search_index: str,
+    attributes: list[str] | None = None,
+    truncate: bool = True,
+) -> Any:
+    """Get a single record from GoaT.
+
+    An LLM can use this to fetch detailed information about a specific record.
+    the record ID can be a taxon ID, assembly accession, or sample ID depending
+    on the search_index.
+
+    Use this tool after identifying a specific record of interest from a search_goat
+    query, or when a use explicitly requests information about a known record.
+
+    Example user queries that would use this tool:
+    - "Give me details about the taxon with ID 1234."
+    - "What is the assembly level and genome size for assembly GCA_123456?"
+    - "What information does have about bats?" (Implies fetching record for order
+        Chiroptera.)
+    - "What target lists are cats on?" (Implies fetching record for family Felidae.)
+    - "Provide details about sample SRS123456."
+    - "Which bioprojects are associated with rodents?" (Implies fetching record for
+        order Rodentia.)
+    - "what is the full lineage of Canis lupus?" (Implies fetching record for taxon
+        Canis lupus with an empty attribute list, [].)
+
+    Returned information includes:
+    - Scientific name
+    - Taxon ID
+    - Rank
+    - Lineage
+    - Requested attributes and their values
+
+    When summarizing a record, the LLM MUST include the GoaT web interface URL.
+
+    Args:
+        record_id: ID of the record to fetch
+        search_index: Index type (taxon, assembly, sample)
+        attributes: List of attributes to include in the response (default: all)
+        truncate: Whether to truncate long lists of attribute values (default: True)
+    """
+    url = (
+        f"{GOAT_API_BASE}/record?result={search_index}"
+        f"&recordId={record_id}&taxonomy=ncbi"
+    )
+    data = await make_goat_request(url)
+    if not data or "records" not in data:
+        return {"error": "Unable to fetch record or no record found."}
+
+    return format_record(data["records"][0]["record"], url, attributes, truncate)
+
+
 @mcp.tool()
 async def search_goat(
     search_index: str = "taxon",
@@ -365,7 +479,8 @@ async def search_goat(
     - Include 'operator' and 'value' keys for filtering
     - Valid operators: '=', '!=', '>', '<', '>=', '<='
     - Keyword attributes: comma-separated values = OR, separate dicts = AND
-    - Prefix values with '!' for NOT
+    - Taxon names: comma-separated names = OR
+    - Prefix values with '!' for NOT. Works with keyword attributes and taxon names.
     - If the only value(s) for a keyword attribute is negated (e.g., '!value'),
         the LLM MUST set 'null' as an additional value to include records
         where the attribute is missing.
@@ -383,7 +498,7 @@ async def search_goat(
         on the presence of an attribute, the LLM MUST use 'exclude': ['Ancestral',
         'Missing'] to ensure only records with direct or descendant data are counted.
 
-    When summarizing results, MUST include the GoaT web interface URL.
+    When summarizing results, the LLM MUST include the GoaT web interface URL.
 
     Args:
         search_index: Index to search (taxon, assembly, or sample)

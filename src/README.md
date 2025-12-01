@@ -33,10 +33,13 @@ Try a query:
 - how many species are in goat?
 - which species are on both the DToL and CANBP long lists?
 - which species with chromosomal or better assemblies have over 10Mb contiguity?
-- what about for scaffold n50?
+  - what about for scaffold n50?
 - how many bat families are targeted by the vgp?
 - which attributes support ordered keyword searches?
 - how many cat species are missing genome size data?
 - which species are on the DTOL target list?
 - how many species have a tolid prefix beginning ilLys?
 - how many have tolid prefixes ending cori?
+- what are the bioprojects for bats?
+  - can you get me a list of all the bioprojects?
+- what is the lineage for the banded snail?
