@@ -38,6 +38,97 @@ async def get_goat_description() -> str:
     return GOAT_DESCRIPTION
 
 
+@mcp.resource("resource://goat/example-queries")
+async def get_example_queries_resource() -> str:
+    """Example queries demonstrating GoaT's capabilities.
+
+    If resources are sorted then prefer this over the get_example_queries tool.
+    """
+    return """Example queries you can ask GoaT:
+
+**Counting Records:**
+• How many species are in GoaT?
+• How many bat families are targeted by the VGP?
+• How many cat species are missing genome size data?
+
+**Target Lists & Projects:**
+• Which species are on both the DToL and CANBP long lists?
+• Which species are on the DToL target list?
+• What are the bioprojects for bats?
+
+**Assembly Quality:**
+• Which species with chromosomal assemblies have over 10Mb contiguity?
+• Show me a table of contig and scaffold N50 for cat assemblies, sorted by contig N50
+
+**Taxonomy & Lineage:**
+• What is the lineage for the banded snail?
+• How many assemblies are there for species in the cat and dog families?
+• What target lists are cats on?
+
+**Advanced Searches:**
+• How many species have a ToLID prefix beginning with ilLys?
+• Which attributes support ordered keyword searches?
+"""
+
+
+@mcp.tool()
+async def get_example_queries(category: str = "all") -> str:
+    """Get example queries to demonstrate GoaT capabilities.
+
+    Use this tool to help users understand what kinds of questions they can ask.
+    If resources are sorted then prefer the get_example_queries_resource resource.
+
+    CRITICAL: The LLM MUST use this tool to answer requests for example queries.
+
+    IMPORTANT: TThe LLM should present the example queries as the user would type them
+    and only show the examples relevant to the requested category.
+
+    If no category is specified, return basic examples and prompt the user that they
+    can specify a category to see more examples.
+
+    Args:
+        category: Type of examples to show:
+            - "all": Show all examples
+            - "basic": Simple counting queries
+            - "target_lists": Queries about sequencing projects
+            - "assembly": Assembly quality queries
+            - "taxonomy": Taxonomic and lineage queries
+            - "advanced": Complex searches
+    """
+    examples = {
+        "basic": """**Basic Counting Queries:**
+- How many species are in GoaT?
+- How many bat families are targeted by the VGP?
+- How many cat species are missing genome size data?""",
+        
+        "target_lists": """**Target Lists and Projects:**
+- Which species are on both the DToL and CANBP long lists?
+- Which species are on the DToL target list?
+- What are the bioprojects for bats?""",
+        
+        "assembly": """**Assembly Quality Queries:**
+- Which species with chromosomal or better assemblies have over 10Mb contig N50?
+- Show me a table of contig and scaffold N50 for all cat assemblies, sorted by contig N50
+- How many assemblies have chromosome-level quality?""",
+        
+        "taxonomy": """**Taxonomic Queries:**
+- What is the lineage for the banded snail?
+- How many assemblies are there for species in the cat and dog families?
+- What target lists are cats on?""",
+        
+        "advanced": """**Advanced Searches:**
+- How many species have a ToLID prefix beginning with ilLys?
+- How many have ToLID prefixes ending with cori?
+- Which attributes support ordered keyword searches?
+- Which species are on both the DToL and CANBP long lists?"""
+    }
+    
+    if category == "all":
+        return "\n\n".join(examples.values())
+    
+    return examples.get(category, "Unknown category. Valid categories: " + ", ".join(examples.keys()))
+
+
 @mcp.prompt()
 async def goat_query_workflow() -> str:
     """System prompt describing the proper workflow for querying GoaT."""
