@@ -100,32 +100,32 @@ async def get_example_queries(category: str = "all") -> str:
 - How many species are in GoaT?
 - How many bat families are targeted by the VGP?
 - How many cat species are missing genome size data?""",
-        
+
         "target_lists": """**Target Lists and Projects:**
 - Which species are on both the DToL and CANBP long lists?
 - Which species are on the DToL target list?
 - What are the bioprojects for bats?""",
-        
+
         "assembly": """**Assembly Quality Queries:**
 - Which species with chromosomal or better assemblies have over 10Mb contig N50?
 - Show me a table of contig and scaffold N50 for all cat assemblies, sorted by contig N50
 - How many assemblies have chromosome-level quality?""",
-        
+
         "taxonomy": """**Taxonomic Queries:**
 - What is the lineage for the banded snail?
 - How many assemblies are there for species in the cat and dog families?
 - What target lists are cats on?""",
-        
+
         "advanced": """**Advanced Searches:**
 - How many species have a ToLID prefix beginning with ilLys?
 - How many have ToLID prefixes ending with cori?
 - Which attributes support ordered keyword searches?
 - Which species are on both the DToL and CANBP long lists?"""
     }
-    
+
     if category == "all":
         return "\n\n".join(examples.values())
-    
+
     return examples.get(category, "Unknown category. Valid categories: " + ", ".join(examples.keys()))
 
 
@@ -686,6 +686,8 @@ def validate_attribute(attr: dict, search_index: str) -> dict:
     value = attr.get("value")
     if value is not None:
         value = validate_attribute_value(value, meta)
+        if operator is None:
+            operator = "="
 
     return {**attr, "name": name, "operator": operator, "value": value}
 
