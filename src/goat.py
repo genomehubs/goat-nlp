@@ -271,7 +271,14 @@ def build_query_string(
     query_parts = []
 
     if taxon:
-        query_parts.append(f"tax_tree%28{taxon.replace('*', '%2A').replace(":", "%3A").replace(",", "%2C")}%29")
+        escaped_taxon = (
+            taxon.replace('*', '%2A')
+            .replace(":", "%3A")
+            .replace(",", "%2C")
+            .replace("[", "%5B")
+            .replace("]", "%5D")
+        )
+        query_parts.append(f"tax_tree%28{escaped_taxon}%29")
 
     if rank:
         query_parts.append(f"tax_rank%28{rank}%29")
@@ -436,6 +443,15 @@ async def get_goat_record(
         attributes: List of attributes to include in the response (default: all)
         truncate: Whether to truncate long lists of attribute values (default: True)
     """
+    try:
+        if attributes is not None:
+            attributes = validate_attribute_names(attributes, search_index)
+    except ValueError as ve:
+        return f"""Error in attribute validation: {str(ve)}
+
+Please check attribute names against GoaT metadata using the
+get_attribute_selection_context or get_valid_types tools.
+"""
     url = (
         f"{GOAT_API_BASE}/record?result={search_index}"
         f"&recordId={record_id}&taxonomy=ncbi"
@@ -519,7 +535,7 @@ def format_result_table(
                 value = f"{str(value)[:47]}..."
 
             if flag:
-                value += " (Ancestral)"
+                value = f"{value} (Ancestral)"
 
             row_values.append(str(value))
 
@@ -535,6 +551,80 @@ def format_result_table(
     return f"""Here are the top results:
 {table}{flag_note}
 """
+
+
+def validate_operator(operator: str, meta: dict) -> str:
+    """Validate and return a proper GoaT operator."""
+    valid_operators = {"=": "=", "!=": "!=", ">": ">", "<": "<", ">=": ">=", "<=": "<="}
+    valid_kw_operators = {"=": "=", "!=": "!="}
+    if meta.get("processed_type") == "keyword":
+        valid_operators = valid_kw_operators
+    if operator not in valid_operators:
+        raise ValueError(f"Invalid operator '{operator}'. Must be one of {list(valid_operators.keys())}.")
+    return valid_operators[operator]
+
+
+def validate_attribute_value(value: Any, meta: dict) -> str:
+    """Validate and format an attribute value for GoaT query."""
+    if meta.get("processed_type", "").endswith("keyword") and meta.get("constraint", {}).get("enum"):
+        valid_values = [v.lower() for v in meta["constraint"]["enum"]]
+        values = [v.strip().lower() for v in str(value).split(",")]
+        for v in values:
+            if v.lstrip("!") not in valid_values:
+                raise ValueError(f"Invalid value '{v}' for attribute. Must be one of {valid_values}.")
+        return ",".join(values)
+    return value
+
+
+def validate_attribute_name(name: str, search_index: str) -> str:
+    """Validate attribute name for GoaT query."""
+    if name is None or not isinstance(name, str) or not name.strip():
+        raise ValueError("Attribute name must be a non-empty string.")
+    if name not in _FIELD_CACHE.get(search_index, {}):
+        raise ValueError(f"Attribute name '{name}' not found in GoaT for index '{search_index}'.")
+    return name
+
+
+def validate_attribute(attr: dict, search_index: str) -> dict:
+    """Validate attribute name, operator, and value for GoaT query."""
+    name = validate_attribute_name(attr.get("name"), search_index)
+    meta = _FIELD_CACHE.get(search_index, {}).get(name, {})
+    operator = attr.get("operator")
+    if operator is not None:
+        operator = validate_operator(operator, meta)
+    value = attr.get("value")
+    if value is not None:
+        value = validate_attribute_value(value, meta)
+
+    return {**attr, "name": name, "operator": operator, "value": value}
+
+
+def validate_attributes(
+    attributes: list[dict] | None,
+    search_index: str,
+) -> list[dict] | None:
+    """Validate a list of attribute filters for GoaT query."""
+    if not attributes:
+        return None
+    validated_attrs = []
+    for attr in attributes:
+        validated_attr = validate_attribute(attr, search_index)
+        validated_attrs.append(validated_attr)
+    return validated_attrs
+
+
+def validate_attribute_names(
+    names: list[str] | None,
+    search_index: str,
+) -> list[str] | None:
+    """Validate a list of attribute names for GoaT query."""
+    if not names:
+        return None
+    validated_names = []
+    for name in names:
+        validated_name = validate_attribute_name(name, search_index)
+        validated_names.append(validated_name)
+    return validated_names
 
 
 @mcp.tool()
@@ -595,7 +685,9 @@ async def search_goat(
     - User keywords indicating AND: "both", "and", "all of", "in both", "on both"
     - User keywords indicating OR: "either", "or", "any of", "in any"
 
-    - Taxon names: comma-separated names = OR
+    - Taxon names: comma-separated names = OR. IMPORTANT: it is more efficient to
+        search with a comma-separated list of taxon names (up to 100 at a time) than
+        to do multiple separate queries.
     - Prefix values with '!' for NOT. Works with keyword attributes and taxon names.
     - If the only value(s) for a keyword attribute is negated (e.g., '!value'),
         the LLM MUST set 'null' as an additional value to include records
@@ -630,6 +722,19 @@ async def search_goat(
         show_table: Whether to show results in a table format (default: False shows count)
         table_rows: Number of rows to include in the table if show_table is True (default: 5)
     """
+    try:
+        if attributes is not None:
+            attributes = validate_attributes(attributes, search_index)
+        if fields is not None:
+            fields = validate_attribute_names(fields, search_index)
+        if sort_by is not None:
+            sort_by = validate_attribute_name(sort_by, search_index)
+    except ValueError as ve:
+        return f"""Error in attribute validation: {str(ve)}
+
+Please check attribute names, operators, and values against GoaT metadata
+using the get_attribute_selection_context or get_valid_types tools.
+"""
     query_string = build_query_string(taxon, rank, attributes)
     exclusions = set_exclusions(attributes)
 
