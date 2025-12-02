@@ -50,3 +50,8 @@ Try a query:
 - what is the protected status of meles meles
 - which species of insect have protected status
   - can you give me a table of the conservation statuses
+
+report based queries
+
+- get me a histogram of assembly_span values across all species
+  - give me the version with estimated values as well

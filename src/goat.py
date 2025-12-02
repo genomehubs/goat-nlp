@@ -714,10 +714,15 @@ def validate_attribute_names(
     if not names:
         return None
     validated_names = []
+    other_names = []
     for name in names:
-        validated_name = validate_attribute_name(name, search_index)
-        validated_names.append(validated_name)
-    return validated_names
+        try:
+            validated_name = validate_attribute_name(name, search_index)
+            validated_names.append(validated_name)
+        except ValueError:
+            if name.endswith("_id") or name in {"scientific_name", "taxon_rank"}:
+                other_names.append(name)
+    return validated_names.extend(other_names) or None
 
 
 @mcp.tool()
@@ -790,18 +795,20 @@ async def search_goat(
         value_metadata from the attribute context to infer the correct value. If
         no value can be found that matches the enum, the LLM MUST inform the user.
     - The LLM must only infer the presence/absence of an attribute using a name
-        only and leaving 'operator' and 'value' blank. Testing using value > 0 is
-        ONLY allowed if the user query explicitly states so.
+        only and leaving 'operator' and 'value' blank. Testing using value > or >=
+        an arbitrarily small value is ONLY allowed if the user query explicitly
+        states so.
     - For the taxon index only, attribute status can be "Direct", "Descendant",
         "Ancestral", or "Missing". If a user query implies a specific status,
-        the LLM MUST set an 'exclude'key for filtering where the
+        the LLM MUST set an 'exclude' key for filtering where the
         value is the list of statuses to exclude. For queries based
-        on the presence of an attribute, the LLM MUST use 'exclude': ['Ancestral',
-        'Missing'] to ensure only records with direct or descendant data are counted.
+        on the presence of an attribute where show_table is False, the LLM MUST
+        use 'exclude': ['Ancestral', 'Missing'] to ensure only records with direct
+        or descendant data are counted.
 
     When summarizing results or presenting a table, the LLM MUST include the GoaT
     web interface URL.
-
+`
     Args:
         search_index: Index to search (taxon, assembly, or sample)
         taxon: Optional taxonomic scope (scientific name, taxon ID, etc.)
@@ -888,17 +895,233 @@ using the get_attribute_selection_context or get_valid_types tools.
             search_url=search_url,
         )
 
-    return f"""
+    result = f"""
 According to {GOAT_DESCRIPTION}, there are {description}.
 
 This count is based on data from the NCBI taxonomy,
 supplemented by additional metadata from the GoaT database.
+"""
+
+    if show_table:
+        return f"""
+
+This table shows the top {size} results.
 
 {table}
+"""
+
+    result += f"""
 
 Explore these results in the GOAT web interface:
 {search_url}
 """
+
+    return result
+
+
+def update_query_string(search_url: str, parameter: str, value: str) -> str:
+    """Update the search URL to include the desired report type."""
+    if f"{parameter}=" in search_url:
+        base_url, query_params = search_url.split("?", 1)
+        params = query_params.split("&")
+        updated_params = []
+        for param in params:
+            if param.startswith(f"{parameter}="):
+                updated_params.append(f"{parameter}={value}")
+            else:
+                updated_params.append(param)
+        updated_query = "&".join(updated_params)
+        return f"{base_url}?{updated_query}"
+    else:
+        separator = "&" if "?" in search_url else "?"
+        return f"{search_url}{separator}{parameter}={value}"
+
+
+def format_sources_report(report_data: dict) -> str:
+    """Format a sources report for LLM interpretation and user presentation.
+
+    Args:
+        report_data: The sources report from GoaT API
+
+    Returns:
+        Formatted markdown string with source attribution
+    """
+    if not report_data or "report" not in report_data:
+        return "No source information available."
+
+    sources = report_data.get("report", {}).get("report", {}).get("sources", {})
+
+    if not sources:
+        return "No source information available."
+
+    # Sort sources by count (descending) for better presentation
+    sorted_sources = sorted(
+        sources.items(),
+        key=lambda x: x[1].get("count", 0),
+        reverse=True
+    )
+
+    lines = [
+        "## Data Sources\n",
+        "The following sources contributed data to these results:\n",
+    ]
+    for source_name, source_info in sorted_sources:
+        count = source_info.get("count", 0)
+        attributes = source_info.get("attributes", [])
+        url = source_info.get("url")
+        date = source_info.get("date")
+
+        lines.extend((f"### {source_name}", f"**Records contributed:** {count:,}"))
+        # Attributes provided
+        if attributes:
+            attr_list = ", ".join(f"`{attr}`" for attr in attributes)
+            lines.append(f"**Attributes:** {attr_list}")
+
+        # URL and date
+        if url:
+            lines.append(f"**URL:** {url}")
+        if date:
+            lines.append(f"**Last updated:** {date}")
+
+        lines.append("")  # Empty line between sources
+
+    return "\n".join(lines)
+
+
+def format_histogram_report(report_data: dict) -> str:
+    """Format a histogram report for LLM interpretation and user presentation.
+
+    Args:
+        report_data: The histogram report from GoaT API
+
+    Returns:
+        Formatted markdown string with histogram summary and distribution
+    """
+    if not report_data or "report" not in report_data:
+        return "No histogram information available."
+
+    histogram_data = report_data.get("report", {}).get("report", {}).get("histogram", {})
+    if not histogram_data:
+        return "No histogram information available."
+
+    histograms = histogram_data.get("histograms", {})
+
+    # Extract key information
+    field = histograms.get("field", "unknown")
+    scale = histograms.get("scale", "linear")
+    query = histograms.get("query", "")
+    total_count = histograms.get("x", 0)
+    stats = histograms.get("stats", {})
+    buckets = histograms.get("buckets", [])
+    counts = histograms.get("allValues", [])
+
+    # Build the summary
+    lines = [
+        "## Histogram Summary",
+        f"- **Total assemblies**: {total_count}",
+        f"- **Field**: `{field}`",
+        f"- **Scale**: {scale}",
+        f"- **Query**: `{query}`",
+        "",
+        "### Statistics",
+    ]
+
+    # Add statistics if available
+    if stats:
+        min_val = stats.get("min", 0)
+        max_val = stats.get("max", 0)
+        avg_val = stats.get("avg", 0)
+        sum_val = stats.get("sum", 0)
+
+        lines.extend([
+            f"- **Min**: {min_val:,} bases",
+            f"- **Max**: {max_val:,} bases",
+            f"- **Average**: {avg_val:,.0f} bases",
+            f"- **Sum**: {sum_val:,} bases",
+            "",
+        ])
+
+    # Build distribution table
+    if buckets and counts and len(buckets) > 1:
+        lines.extend([
+            "### Distribution (bucket ranges and counts)",
+            "",
+            "| Bucket Min (bases) | Bucket Max (bases) | Count |",
+            "|-------------------:|-------------------:|------:|",
+        ])
+
+        # Create rows for each bucket
+        for i in range(len(buckets) - 1):
+            bucket_min = buckets[i]
+            bucket_max = buckets[i + 1]
+            count = counts[i] if i < len(counts) else 0
+
+            lines.append(f"| {bucket_min:,.0f} | {bucket_max:,.0f} | {count} |")
+
+        lines.append("")
+
+    if caption := histogram_data.get("caption"):
+        lines.extend([
+            f"*{caption}*",
+            "",
+        ])
+
+    return "\n".join(lines)
+
+
+@mcp.tool()
+async def get_goat_report(
+    search_url: str,
+    report_type: str = "sources",
+    rank: str | None = None,
+) -> str:
+    """Get a detailed report from GoaT based on a search URL.
+
+    An LLM can use this to fetch detailed reports (like sources, summaries,
+    etc.) for a previously executed GoaT search query.
+
+    Report types include:
+    - sources: List of data sources contributing to the results
+    - histogram: Histogram of attribute distributions
+    - scatter: Scatter plot data for attribute values
+    - tree: Taxonomic tree representation
+
+    Args:
+        search_url: Full GoaT search URL used to generate the report
+        report_type: Type of report to generate (default: sources)
+        rank: Optional taxonomic rank filter
+              (required for histogram/scatter reports on taxon index)
+    """
+    url = (
+        search_url.replace("/api/v2/", "/")
+        .replace("/search", "/api/v2/report")
+        .replace("/count", "/api/v2/report")
+        .replace("query=", "x=")
+    )
+    url = update_query_string(url, "report", report_type)
+    need_rank = {"histogram", "scatter"} if "result=taxon" in url else set()
+    if report_type in need_rank and not rank and "tax_rank%28" in url:
+        rank = url.split("tax_rank%28")[1].split("%29")[0]
+    if rank:
+        url = update_query_string(url, "rank", rank)
+    else:
+        return (
+            f"Error: When querying {report_type} reports for the "
+            f"taxon index, a 'rank' parameter must be provided."
+        )
+    # url = update_query_string(url, "count", "0")
+
+    data = await make_goat_request(url)
+    if not data or "report" not in data:
+        return f"Unable to fetch report or no report found for URL: {url}."
+
+    if report_type == "sources":
+        return format_sources_report(data)
+
+    if report_type == "histogram":
+        return format_histogram_report(data)
+
+    return f"GoaT Report ({report_type}):\n\n{data['report']}"
 
 
 @mcp.tool()
