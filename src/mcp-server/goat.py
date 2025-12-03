@@ -1,3 +1,4 @@
+import logging
 import time
 from typing import Any
 
@@ -5,6 +6,17 @@ import httpx
 from fastmcp import FastMCP
 from fastmcp.server.middleware.caching import ResponseCachingMiddleware
 from fastmcp.server.middleware.timing import DetailedTimingMiddleware, TimingMiddleware
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('/tmp/goat-mcp.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # Initialize FastMCP server
 mcp = FastMCP("goat")
@@ -139,9 +151,9 @@ async def goat_query_workflow() -> str:
    - "assembly": for questions specifically about genome assemblies
    - "sample": for questions specifically about sequencing samples
 
-2. If using attribute filters, ALWAYS check attribute availability first using
-   get_attribute_selection_context with relevant keywords and the chosen
-   search_index before calling search_goat.
+2. If using attribute FILTERS (not just for reports), check attribute availability
+   first using get_attribute_selection_context with relevant keywords and the
+   chosen search_index before calling search_goat.
 
 3. Extract keywords from the user's question (e.g., "assembly", "sequencing",
    "target list", "genome size") and use them to find appropriate attributes.
@@ -171,7 +183,23 @@ async def goat_query_workflow() -> str:
    - attributes (optional): to filter by other criteria
    All filters are optional and can be combined as needed.
 
-8. Always include the GoaT web interface URL in your response for exploration."""
+8. For distribution/report requests (histogram, scatter, sources):
+   WORKFLOW:
+   a) Execute search_goat with just the taxonomic scope (taxon/rank)
+      - DO NOT check attributes first - they're not needed for the search
+      - DO NOT add the report field to the search - that comes later
+   b) Use the search_url from step (a) with get_goat_report
+   c) Specify x_field in get_goat_report to choose which attribute to analyze
+
+   Example for "chromosome number distribution for flowering plants":
+   a) search_goat(taxon="Angiospermae", rank="species")
+   b) get_goat_report(search_url=<from a>, report_type="histogram",
+                      rank="species", x_field="chromosome_number")
+
+9. Always include the GoaT web interface URL in your response for exploration.
+
+CRITICAL: If a tool call fails or returns an error, provide the result to the user
+rather than retrying with different parameters. Do not enter loops trying variations."""
 
 
 async def _fetch_valid_types(search_index: str = "taxon") -> dict[str, Any]:
@@ -297,18 +325,33 @@ async def get_attribute_selection_context(
         keyword: Keyword to guide attribute selection
         search_index: Index type (default: taxon)
     """
-    return await _get_attribute_context_internal(keyword, search_index)
+    logger.info(f"get_attribute_selection_context called: keyword='{keyword}', search_index={search_index}")
+    result = await _get_attribute_context_internal(keyword, search_index)
+    logger.info(f"Found {len(result.get('attributes', []))} matching attributes")
+    return result
 
 
 async def make_goat_request(url: str) -> dict[str, Any] | None:
     """Make a request to the GoaT API with proper error handling."""
+    logger.info(f"API Request: {url}")
     headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
     async with httpx.AsyncClient(follow_redirects=True) as client:
         try:
             response = await client.get(url, headers=headers, timeout=30.0)
             response.raise_for_status()
-            return response.json()
-        except Exception:
+            result = response.json()
+            logger.info(f"API Response: HTTP {response.status_code}, {len(str(result))} bytes")
+            return result
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP Error {e.response.status_code}: {url}")
+            logger.error(f"Response: {e.response.text[:500]}")
+            return None
+        except httpx.TimeoutException:
+            logger.error(f"Timeout after 30s: {url}")
+            return None
+        except Exception as e:
+            logger.error(f"Request failed: {url}")
+            logger.error(f"Error: {type(e).__name__}: {str(e)}")
             return None
 
 
@@ -681,9 +724,18 @@ def validate_attribute(attr: dict, search_index: str) -> dict:
     name = validate_attribute_name(attr.get("name"), search_index)
     meta = _FIELD_CACHE.get(search_index, {}).get(name, {})
     operator = attr.get("operator")
+    value = attr.get("value")
+
+    # Check for invalid pattern: using >0 or >=0 to test for presence
+    if operator in (">", ">=") and value in (0, "0", 0.0, "0.0"):
+        raise ValueError(
+            f"Invalid filter pattern for '{name}': Using {operator}{value} to test for attribute "
+            f"presence is not supported. To filter for records with any value for this attribute, "
+            f"use only the attribute name without operator or value: {{\"name\": \"{name}\"}}"
+        )
+
     if operator is not None:
         operator = validate_operator(operator, meta)
-    value = attr.get("value")
     if value is not None:
         value = validate_attribute_value(value, meta)
         if operator is None:
@@ -794,10 +846,13 @@ async def search_goat(
         implies a specific value that is not in the enum, the LLM should use the
         value_metadata from the attribute context to infer the correct value. If
         no value can be found that matches the enum, the LLM MUST inform the user.
-    - The LLM must only infer the presence/absence of an attribute using a name
-        only and leaving 'operator' and 'value' blank. Testing using value > or >=
-        an arbitrarily small value is ONLY allowed if the user query explicitly
-        states so.
+    - CRITICAL - Testing for attribute presence/absence:
+        * To test if an attribute has ANY value: use name only, leave operator and value blank
+        * NEVER use >0, >=0, <0, or <=0 to test for presence - this is INVALID
+        * Only use comparison operators when the user explicitly mentions a threshold
+        * Example: "species with chromosome number" = {"name": "chromosome_number"}
+        * Example: "chromosome number > 20" = {"name": "chromosome_number",
+          "operator": ">", "value": "20"}
     - For the taxon index only, attribute status can be "Direct", "Descendant",
         "Ancestral", or "Missing". If a user query implies a specific status,
         the LLM MUST set an 'exclude' key for filtering where the
@@ -822,6 +877,10 @@ async def search_goat(
         show_table: Whether to show results in a table format (default: False shows count)
         table_rows: Number of rows to include in the table if show_table is True (default: 5)
     """
+    logger.info(f"search_goat called: index={search_index}, taxon={taxon}, rank={rank}, "
+                f"attributes={attributes}, fields={fields}, sort_by={sort_by}, "
+                f"sort_order={sort_order}, show_table={show_table}, size={size}")
+
     try:
         if attributes is not None:
             attributes = validate_attributes(attributes, search_index)
@@ -830,6 +889,7 @@ async def search_goat(
         if sort_by is not None:
             sort_by = validate_attribute_name(sort_by, search_index)
     except ValueError as ve:
+        logger.error(f"Attribute validation error: {ve}")
         return f"""Error in attribute validation: {str(ve)}
 
 Please check attribute names, operators, and values against GoaT metadata
@@ -837,6 +897,8 @@ using the get_attribute_selection_context or get_valid_types tools.
 """
     query_string = build_query_string(taxon, rank, attributes)
     exclusions = set_exclusions(attributes)
+    logger.info(f"Built query_string: {query_string}")
+    logger.info(f"Built exclusions: {exclusions}")
 
     endpoint = "search" if show_table else "count"
 
@@ -1041,24 +1103,36 @@ def format_histogram_report(report_data: dict) -> str:
             "",
         ])
 
-    # Build distribution table
-    if buckets and counts and len(buckets) > 1:
-        lines.extend([
-            "### Distribution (bucket ranges and counts)",
-            "",
-            "| Bucket Min (bases) | Bucket Max (bases) | Count |",
-            "|-------------------:|-------------------:|------:|",
-        ])
+        # Build distribution table
+        if buckets and counts and len(buckets) > 1:
+            lines.extend([
+                "### Distribution (bucket ranges and counts)",
+                "",
+                "| Bucket Min (bases) | Bucket Max (bases) | Count |",
+                "|-------------------:|-------------------:|------:|",
+            ])
 
-        # Create rows for each bucket
-        for i in range(len(buckets) - 1):
-            bucket_min = buckets[i]
-            bucket_max = buckets[i + 1]
-            count = counts[i] if i < len(counts) else 0
+            # Create rows for each bucket
+            for i in range(len(buckets) - 1):
+                bucket_min = buckets[i]
+                bucket_max = buckets[i + 1]
+                count = counts[i] if i < len(counts) else 0
 
-            lines.append(f"| {bucket_min:,.0f} | {bucket_max:,.0f} | {count} |")
+                lines.append(f"| {bucket_min:,.0f} | {bucket_max:,.0f} | {count} |")
 
-        lines.append("")
+            lines.append("")
+
+        else:  # handle keyword buckets
+            lines.extend([
+                "### Distribution (value counts)",
+                "",
+                "| Value | Count |",
+                "|------:|------:|",
+            ])
+            for i, count in enumerate(counts):
+                value = buckets[i] if i < len(buckets) else "N/A"
+                lines.append(f"| {value} | {count} |")
+            lines.append("")
 
     if caption := histogram_data.get("caption"):
         lines.extend([
@@ -1074,30 +1148,53 @@ async def get_goat_report(
     search_url: str,
     report_type: str = "sources",
     rank: str | None = None,
+    x_field: str | None = None,
+    y_field: str | None = None,
 ) -> str:
     """Get a detailed report from GoaT based on a search URL.
 
-    An LLM can use this to fetch detailed reports (like sources, summaries,
-    etc.) for a previously executed GoaT search query.
+    This tool generates various types of analytical reports from a GoaT search.
+    It works with the search_url returned from a previous search_goat call.
+
+    IMPORTANT FOR HISTOGRAMS: To generate a histogram for a specific attribute,
+    use the x_field parameter to specify which attribute to plot. The LLM can
+    choose ANY valid attribute for the search_index, even if it wasn't included
+    in the original search query.
+
+    Example workflow for "chromosome number distribution for flowering plants":
+    1. Call search_goat(taxon="Angiospermae", rank="species") to get search_url
+    2. Call get_goat_report(search_url=<url>, report_type="histogram",
+                           rank="species", x_field="chromosome_number")
+
+    The x_field parameter tells GoaT which attribute to use for the histogram,
+    so you don't need to include that field in the original search - you only
+    need to specify it when requesting the report.
 
     Report types include:
     - sources: List of data sources contributing to the results
-    - histogram: Histogram of attribute distributions
-    - scatter: Scatter plot data for attribute values
+    - histogram: Distribution of values for a specific attribute (use x_field)
+    - scatter: Scatter plot comparing two attributes (use x_field and y_field)
     - tree: Taxonomic tree representation
 
     Args:
-        search_url: Full GoaT search URL used to generate the report
+        search_url: Full GoaT search URL from a previous search_goat call
         report_type: Type of report to generate (default: sources)
-        rank: Optional taxonomic rank filter
-              (required for histogram/scatter reports on taxon index)
+        rank: Taxonomic rank filter (REQUIRED for histogram/scatter on taxon index)
+        x_field: Attribute name for histogram x-axis or scatter plot x-axis
+                 (e.g., "chromosome_number", "assembly_span", "genome_size")
+        y_field: Attribute name for scatter plot y-axis
     """
+    logger.info(f"get_goat_report called: search_url={search_url}, report_type={report_type}, "
+                f"rank={rank}, x_field={x_field}, y_field={y_field}")
+
     url = (
         search_url.replace("/api/v2/", "/")
         .replace("/search", "/api/v2/report")
         .replace("/count", "/api/v2/report")
         .replace("query=", "x=")
     )
+    search_index = url.split("result=")[1].split("&")[0]
+    logger.info(f"Extracted search_index: {search_index}")
     url = update_query_string(url, "report", report_type)
     need_rank = {"histogram", "scatter"} if "result=taxon" in url else set()
     if report_type in need_rank and not rank and "tax_rank%28" in url:
@@ -1110,6 +1207,21 @@ async def get_goat_report(
             f"taxon index, a 'rank' parameter must be provided."
         )
     # url = update_query_string(url, "count", "0")
+    try:
+        if x_field:
+            x_field = validate_attribute_name(x_field, search_index=search_index)
+            if "&fields=" in url:
+                url = url.replace("&fields=", f"&fields={x_field}")
+            else:
+                url += f"&fields={x_field}"
+        if y_field:
+            y_field = validate_attribute_name(y_field, search_index=search_index)
+            if "&fields=" in url:
+                url = url.replace("&fields=", f"&fields={y_field}")
+            else:
+                url += f"&fields={y_field}"
+    except ValueError as ve:
+        return f"""Error in attribute validation: {str(ve)}"""
 
     data = await make_goat_request(url)
     if not data or "report" not in data:
