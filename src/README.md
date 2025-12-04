@@ -32,10 +32,10 @@ Try a query:
 
 - how many species are in goat?
 - which species are on both the DToL and CANBP long lists?
-- which species with chromosomal or better assemblies have over 10Mb contiguity?
+- which species with chromosomal or better assemblies have over 10Mb contiguity? - not gemini
   - what about for scaffold n50?
-- how many bat families are targeted by the vgp?
-- which attributes support ordered keyword searches?
+- how many bat families are targeted by the vgp? - not gemini
+- which attributes support ordered keyword searches? - not gemini
 - how many cat species are missing genome size data?
 - which species are on the DTOL target list?
 - how many species have a tolid prefix beginning ilLys?

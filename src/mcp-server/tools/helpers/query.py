@@ -1,3 +1,5 @@
+from urllib.parse import quote
+
 """Query building utilities for GoaT MCP server."""
 
 
@@ -52,7 +54,7 @@ def format_attributes(attributes: list[dict]) -> str:
             continue
         value_str = str(value)
 
-        formatted_attrs.append(f"{name}{operator}{value_str}")
+        formatted_attrs.append(f"{name}{quote(operator)}{value_str}")
 
     if formatted_attrs:
         return "%20AND%20" + "%20AND%20".join(formatted_attrs)

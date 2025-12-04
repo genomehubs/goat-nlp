@@ -95,6 +95,7 @@
 │           ┌─────────────────────────┐                         │
 │           │   GoaT MCP Server       │                         │
 │           │  • search_goat          │                         │
+│           │  • simple_search          │                         │
 │           │  • get_goat_report      │                         │
 │           │  • get_attribute_ctx    │                         │
 │           │  • check_taxon_exists   │                         │

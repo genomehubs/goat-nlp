@@ -2,18 +2,76 @@
 
 GOAT_TOOLS = [
     {
-        "name": "goat_search_goat",
-        "description": """Search GoaT database for species with genomic metadata.
+        "name": "goat_simple_search",
+        "description": """Simple search interface for common GoaT queries.
 
-Use this to answer questions about:
-- How many species/taxa match criteria
-- Which species have specific attributes (assemblies, chromosome data, etc.)
-- Taxonomic queries within groups (mammals, plants, insects, etc.)
+Use this for straightforward questions about genomic data.
+Perfect for counting species, families, assemblies, or samples.
 
 Examples:
-- "How many plant species have chromosome data?"
-- "Which mammals have chromosome-level assemblies?"
-- "Count of insect species with genomes"
+- "How many cat species have genome size data?"
+- "Which bat families are targeted by VGP?"
+- "How many species have a tolid prefix beginning ilLys?"
+
+Parameters:
+- user_query: Your original question (required)
+- what_to_count: What you're counting (species, families, genera, orders, assemblies, samples)
+- taxon: Scientific name for taxonomic scope (optional)
+  Common names: mammals→Mammalia, cats→Felis, dogs→Canis, bats→Chiroptera, birds→Aves, insects→Insecta
+- specific_attribute: Attribute name to filter by (optional)
+""",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "user_query": {
+                    "type": "string",
+                    "description": "The original user question (required)",
+                },
+                "what_to_count": {
+                    "type": "string",
+                    "description": "What you're counting: species, families, genera, orders, assemblies, samples",
+                    "enum": [
+                        "species",
+                        "genus",
+                        "genera",
+                        "family",
+                        "families",
+                        "order",
+                        "orders",
+                        "class",
+                        "classes",
+                        "phylum",
+                        "phyla",
+                        "kingdom",
+                        "assemblies",
+                        "assembly",
+                        "samples",
+                        "sample",
+                    ],
+                },
+                "taxon": {
+                    "type": "string",
+                    "description": "Scientific name for taxonomic scope (e.g., 'Mammalia', 'Felis', 'Chiroptera')",
+                },
+                "specific_attribute": {
+                    "type": "string",
+                    "description": "Attribute name to filter by (e.g., 'genome_size', 'assembly_level')",
+                },
+            },
+            "required": ["user_query"],
+        },
+    },
+    {
+        "name": "goat_search_goat",
+        "description": """Advanced search interface for complex GoaT queries.
+
+Use this for complex queries with multiple filters or specific attribute requirements.
+For most simple queries, use goat_simple_search instead.
+
+Examples:
+- "Which species are on BOTH DToL and CANBP lists?" (AND logic)
+- "Count species with either high genome size OR high chromosome count" (OR logic)
+- "Species missing genome data but with assembly info" (exclusions)
 """,
         "input_schema": {
             "type": "object",
@@ -44,6 +102,10 @@ Examples:
                         },
                     },
                 },
+                "user_query": {
+                    "type": "string",
+                    "description": "The original user question (required)",
+                },
                 "show_table": {
                     "type": "boolean",
                     "description": "Return table of results (true) or count (false)",
@@ -55,7 +117,7 @@ Examples:
                     "default": 5,
                 },
             },
-            "required": [],
+            "required": ["user_query"],
         },
     },
     {
@@ -92,12 +154,20 @@ Requires a search_url from a previous goat_search_goat call.
     },
     {
         "name": "goat_get_attribute_selection_context",
-        "description": """Find valid attribute names in GoaT for filtering.
+        "description": """Find valid attribute names in GoaT with built-in disambiguation guidance.
 
-Use this when you need to discover what attributes are available
-for a specific topic (e.g., "chromosome", "assembly", "genome size").
+Use this to discover attributes for any keyword. Provides automatic guidance for confusing cases:
 
-Always call this before using attributes in goat_search_goat.
+⚠️ AUTOMATIC DISAMBIGUATION for projects (DToL, CANBP, VGP):
+- "dtol list" → Suggests long_list=dtol (target list membership)
+- "dtol sequencing" → Suggests sequencing_status_dtol (sequencing progress)
+
+For other topics, returns matching attributes:
+- "genome size" → finds genome_size, genome_size_raw
+- "chromosome" → finds chromosome_number, haploid_number
+- "assembly" → finds assembly_level, assembly_span
+
+This is your ONE tool for all attribute discovery.
 """,
         "input_schema": {
             "type": "object",

@@ -4,6 +4,9 @@ This module re-exports all utilities from submodules for backward compatibility.
 Individual submodules can be imported directly for more focused imports.
 """
 
+# Re-export API utilities
+from .api import make_goat_request
+
 # Re-export constants
 from .constants import GOAT_API_BASE, GOAT_DESCRIPTION, USER_AGENT
 
@@ -36,6 +39,8 @@ from .validation import (
 )
 
 __all__ = [
+    # API utilities
+    "make_goat_request",
     # Constants
     "GOAT_API_BASE",
     "GOAT_DESCRIPTION",

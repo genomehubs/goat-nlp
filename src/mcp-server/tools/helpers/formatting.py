@@ -1,10 +1,9 @@
 """Formatting utilities for GoaT MCP server."""
 
-import logging
-
+from ...logging_config import get_logger
 from .constants import GOAT_DESCRIPTION
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def rank_description(rank: str) -> str:
@@ -189,7 +188,7 @@ def format_result_table(
 """
 
 
-def format_sources_report(report_data: dict) -> str:
+def format_sources_report(report_data: dict, goat_url: str) -> str:
     """Format a sources report for LLM interpretation and user presentation.
 
     Args:
@@ -229,10 +228,13 @@ def format_sources_report(report_data: dict) -> str:
 
         lines.append("")  # Empty line between sources
 
-    return "\n".join(lines)
+    result = "\n".join(lines)
+    return f"""{result}
+
+GoaT URL: {goat_url}"""
 
 
-def format_histogram_report(report_data: dict, logger_instance=None) -> str:
+def format_histogram_report(report_data: dict, url: str, logger_instance=None) -> str:
     """Format a histogram report for LLM interpretation and user presentation.
 
     Args:
@@ -296,10 +298,17 @@ def format_histogram_report(report_data: dict, logger_instance=None) -> str:
 
     # Add statistics if available
     if stats:
-        format_stats_and_buckets(stats, lines, buckets, counts)
+        try:
+            format_stats_and_buckets(stats, lines, buckets, counts)
+        except Exception as e:
+            logger_instance.error(f"Error formatting stats and buckets: {e}")
+            format_buckets(lines, buckets, counts)
     else:
         format_buckets(lines, buckets, counts)
-    return "\n".join(lines)
+    result = "\n".join(lines)
+    return f"""{result}
+
+GoaT URL: {url}"""
 
 
 def format_stats_and_buckets(stats, lines, buckets, counts):

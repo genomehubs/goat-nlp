@@ -5,13 +5,15 @@ from typing import Any
 
 def validate_operator(operator: str, meta: dict) -> str:
     """Validate and return a proper GoaT operator."""
-    valid_operators = {"=": "=", "!=": "!=", ">": ">", "<": "<", ">=": ">=", "<=": "<="}
-    valid_kw_operators = {"=": "=", "!=": "!="}
+    if operator is None or not isinstance(operator, str) or not operator.strip():
+        return None
+    valid_operators = {"=": "=", "!=": "!=", ">": ">", "<": "<", ">=": ">=", "<=": "<=", "exists": "exists"}
+    valid_kw_operators = {"=": "=", "!=": "!=", "exists": "exists"}
     if meta.get("processed_type") == "keyword":
         valid_operators = valid_kw_operators
-    if operator not in valid_operators:
+    if operator.lower() not in valid_operators:
         raise ValueError(f"Invalid operator '{operator}'. Must be one of {list(valid_operators.keys())}.")
-    return valid_operators[operator]
+    return valid_operators[operator.lower()]
 
 
 def validate_attribute_value(value: Any, meta: dict) -> str:
@@ -43,7 +45,7 @@ def validate_attribute(attr: dict, search_index: str, field_cache: dict) -> dict
     value = attr.get("value")
 
     # Check for invalid pattern: using >0 or >=0 to test for presence
-    if operator in (">", ">=") and value in (0, "0", 0.0, "0.0"):
+    if operator in {">", ">="} and isinstance(value, (int, float)) and value >= 0:
         raise ValueError(
             f"Invalid filter pattern for '{name}': Using {operator}{value} to test for attribute "
             f"presence is not supported. To filter for records with any value for this attribute, "
@@ -51,7 +53,11 @@ def validate_attribute(attr: dict, search_index: str, field_cache: dict) -> dict
         )
 
     if operator is not None:
-        operator = validate_operator(operator, meta)
+        if operator.lower() == "exists":
+            operator = None
+            value = None
+        else:
+            operator = validate_operator(operator, meta)
     if value is not None:
         value = validate_attribute_value(value, meta)
         if operator is None:
@@ -92,4 +98,5 @@ def validate_attribute_names(
         except ValueError:
             if name.endswith("_id") or name in {"scientific_name", "taxon_rank"}:
                 other_names.append(name)
-    return validated_names.extend(other_names) or None
+    validated_names.extend(other_names)
+    return validated_names or None
