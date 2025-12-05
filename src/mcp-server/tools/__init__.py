@@ -4,6 +4,7 @@ def register_all_tools(mcp):
     """Register all tools with the given MCP server instance."""
     from . import (
         attributes,
+        query_parser,
         record,
         report,
         search,
@@ -12,6 +13,7 @@ def register_all_tools(mcp):
     )
 
     attributes.register_tools(mcp)
+    query_parser.register_tools(mcp)
     record.register_tools(mcp)
     report.register_tools(mcp)
     search.register_tools(mcp)

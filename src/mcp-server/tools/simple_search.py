@@ -1,21 +1,23 @@
 """Simplified search interface for common GoaT queries."""
 
 from ..logging_config import get_logger
-from .search import search_goat
+from .search import goat_advanced_search
 
 logger = get_logger(__name__)
 
 
-async def simple_search(
+async def goat_simple_search(
     user_query: str,
     what_to_count: str | None = None,
     taxon: str | None = None,
     specific_attribute: str | None = None,
 ) -> str:
-    """Simple search interface for common GoaT queries.
+    """Simple search interface for basic GoaT queries.
 
-    This tool is designed for straightforward questions about genomic data.
-    Use this if you're unsure about the complex search_goat options.
+    ⚠️ RECOMMENDATION: Use goat_query for better results!
+    
+    goat_query provides better handling of complex queries, modifiers, and
+    edge cases. Only use goat_simple_search for the most basic queries.
 
     CRITICAL: Always provide user_query - it helps us understand your question.
 
@@ -99,12 +101,12 @@ async def simple_search(
         attributes = [{"name": specific_attribute}]
         logger.info(f"Built attributes from specific_attribute: {attributes}")
 
-    # Delegate to search_goat
+    # Delegate to goat_advanced_search
     logger.info(
-        f"Delegating to search_goat: search_index={search_index}, taxon={taxon}, "
+        f"Delegating to goat_advanced_search: search_index={search_index}, taxon={taxon}, "
         f"rank={rank}, attributes={attributes}"
     )
-    return await search_goat(
+    return await goat_advanced_search(
         search_index=search_index,
         taxon=taxon,
         rank=rank,
@@ -121,4 +123,4 @@ def register_tools(mcp) -> None:
     Args:
         mcp: FastMCP instance to register tools with
     """
-    mcp.tool()(simple_search)
+    mcp.tool()(goat_simple_search)

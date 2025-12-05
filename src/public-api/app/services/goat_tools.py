@@ -2,6 +2,115 @@
 
 GOAT_TOOLS = [
     {
+        "name": "goat_query",
+        "description": """🔬 RECOMMENDED: Parse-based approach for GoaT queries.
+
+Extract structured components from user questions. Backend handles GoaT API details.
+
+Extract these components:
+1. **taxon**: For species/families/genera queries (e.g., "Mammalia", "Felis")
+2. **assembly**: For genome assembly queries (e.g., "GCF_000002305.6")
+3. **sample**: For sample queries (e.g., "SRR1234567")
+4. **rank**: Taxonomic rank (species, genus, family, etc.)
+5. **attributes**: List of attribute filters with optional modifiers
+6. **intent**: "count", "table", "histogram", or "record"
+
+Modifiers for attributes (can be string or list):
+- "missing": Records WITHOUT this attribute
+- "direct": Directly measured only
+- ["min", "direct"]: Combine summary + status modifiers
+
+Examples:
+Q: "How many mammal species have minimum directly measured genome size < 3G?"
+→ intent="count", taxon="Mammalia", rank="species",
+  attributes=[{"name": "genome_size", "modifier": ["min", "direct"], "operator": "<", "value": "3G"}]
+
+Q: "Tell me about assembly GCF_000002305.6"
+→ intent="record", assembly="GCF_000002305.6"
+""",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "user_query": {
+                    "type": "string",
+                    "description": "Original question (required for backend processing)",
+                },
+                "taxon": {
+                    "type": "string",
+                    "description": (
+                        "Scientific name or taxon ID for species/families/genera queries "
+                        "(e.g., 'Mammalia', 'Felis', '9615')"
+                    ),
+                },
+                "assembly": {
+                    "type": "string",
+                    "description": "Assembly accession for assembly queries (e.g., 'GCF_000002305.6')",
+                },
+                "sample": {
+                    "type": "string",
+                    "description": "Sample accession for sample queries (e.g., 'SRR1234567')",
+                },
+                "rank": {
+                    "type": "string",
+                    "description": "Taxonomic rank: species, genus, family, etc. (for taxon queries)",
+                },
+                "attributes": {
+                    "type": "array",
+                    "description": "Attribute filters with optional modifiers",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "operator": {"type": "string"},
+                            "value": {"type": "string"},
+                            "modifier": {
+                                "description": "Single modifier (string) or combined modifiers (array)",
+                                "oneOf": [
+                                    {
+                                        "type": "string",
+                                        "enum": [
+                                            "missing",
+                                            "direct",
+                                            "ancestral",
+                                            "estimated",
+                                            "min",
+                                            "max",
+                                            "median",
+                                            "length",
+                                        ],
+                                    },
+                                    {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "string",
+                                            "enum": [
+                                                "missing",
+                                                "direct",
+                                                "ancestral",
+                                                "estimated",
+                                                "min",
+                                                "max",
+                                                "median",
+                                                "length",
+                                            ],
+                                        },
+                                    },
+                                ],
+                            },
+                        },
+                    },
+                },
+                "intent": {
+                    "type": "string",
+                    "description": "Result type: count, table, histogram, record, report",
+                    "enum": ["count", "table", "histogram", "record", "report"],
+                    "default": "count",
+                },
+            },
+            "required": ["user_query"],
+        },
+    },
+    {
         "name": "goat_simple_search",
         "description": """Simple search interface for common GoaT queries.
 
@@ -62,7 +171,7 @@ Parameters:
         },
     },
     {
-        "name": "goat_search_goat",
+        "name": "goat_advanced_search",
         "description": """Advanced search interface for complex GoaT queries.
 
 Use this for complex queries with multiple filters or specific attribute requirements.
@@ -129,7 +238,7 @@ Use this to visualize distributions of attributes like:
 - Genome size ranges
 - Assembly quality levels
 
-Requires a search_url from a previous goat_search_goat call.
+Requires a search_url from a previous goat_advanced_search call.
 """,
         "input_schema": {
             "type": "object",

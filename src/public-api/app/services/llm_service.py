@@ -245,13 +245,11 @@ class LLMService:
             # Fallback: direct HTTP call to GoaT API
             return await self._fallback_goat_call(tool_name, tool_input)
 
-        # Map tool names: goat_xxx -> xxx (strip goat_ prefix)
-        if tool_name.startswith("goat_"):
-            mcp_tool_name = tool_name[5:]  # Remove "goat_" prefix
-        else:
-            mcp_tool_name = tool_name
+        # Tool names already match between public API and MCP server
+        # (both use goat_query, goat_advanced_search, goat_simple_search, etc.)
+        mcp_tool_name = tool_name
 
-        print(f"Calling MCP tool: {mcp_tool_name} (from {tool_name})")
+        print(f"Calling MCP tool: {mcp_tool_name}")
 
         # Use MCP client - returns dict with "content" key
         result = await mcp_client.call_tool(mcp_tool_name, tool_input)

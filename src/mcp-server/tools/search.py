@@ -3,7 +3,7 @@ from .attributes import FIELD_CACHE, _fetch_valid_types
 from .helpers.api import make_goat_request
 from .helpers.constants import GOAT_API_BASE, GOAT_DESCRIPTION
 from .helpers.formatting import format_result_table, rank_description
-from .helpers.query import build_query_string, set_exclusions
+from .helpers.query import build_query_string, process_modifiers, set_exclusions
 from .helpers.validation import (
     validate_attribute_name,
     validate_attribute_names,
@@ -13,7 +13,7 @@ from .helpers.validation import (
 logger = get_logger(__name__)
 
 
-async def search_goat(
+async def goat_advanced_search(
     search_index: str = "taxon",
     taxon: str | None = None,
     rank: str | None = None,
@@ -25,9 +25,16 @@ async def search_goat(
     size: int = 5,
     user_query: str | None = None,
 ) -> str:
-    """Search GoaT and get a count or table of matching records.
+    """Advanced search for GoaT - EXPERT USE ONLY.
 
-    This is the primary search tool for querying GoaT. All parameters except
+    ⚠️ RECOMMENDATION: Use goat_query instead for 95% of queries!
+    
+    goat_query is the recommended tool that handles GoaT-specific edge cases,
+    modifier processing, and automatic parameter inference. Only use this
+    goat_advanced_search tool if you need explicit control over all parameters
+    and understand the GoaT API internals.
+
+    This tool requires you to explicitly specify all parameters. All parameters except
     search_index are optional, allowing flexible queries.
 
     IMPORTANT: If using attributes or fields, you MUST first call
@@ -228,6 +235,12 @@ Please retry the call with the user_query parameter included."""
 Please check attribute names, operators, and values against GoaT metadata
 using the get_attribute_selection_context or get_valid_types tools.
 """
+    
+    # Process modifiers: convert status-based modifiers to exclusions, keep summary modifiers in attributes
+    if attributes is not None:
+        attributes = process_modifiers(attributes)
+        logger.info(f"Processed modifiers in {len(attributes)} attributes")
+    
     query_string = build_query_string(taxon, rank, attributes)
     exclusions = set_exclusions(attributes)
     logger.info(f"Built query_string: {query_string}")
@@ -320,4 +333,4 @@ def register_tools(mcp) -> None:
     Args:
         mcp: FastMCP instance to register tools with
     """
-    mcp.tool()(search_goat)
+    mcp.tool()(goat_advanced_search)
