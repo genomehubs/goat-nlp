@@ -1,6 +1,7 @@
 from ..logging_config import get_logger
-from .attributes import FIELD_CACHE, _fetch_valid_types
 from .helpers.api import make_goat_request
+from .helpers.constants import FIELD_CACHE
+from .helpers.fetch import fetch_valid_types
 from .helpers.formatting import format_histogram_report, format_sources_report
 from .helpers.urls import update_query_string
 from .helpers.validation import validate_attribute_name
@@ -27,7 +28,7 @@ async def get_goat_report(
     in the original search query.
 
     Example workflow for "chromosome number distribution for flowering plants":
-    1. Call search_goat(taxon="Angiospermae", rank="species") to get search_url
+    1. Call search_goat(taxa=["Angiospermae"], rank="species") to get search_url
     2. Call get_goat_report(search_url=<url>, report_type="histogram",
                            rank="species", x_field="chromosome_number")
 
@@ -94,13 +95,13 @@ async def get_goat_report(
                 f"taxon index, a 'rank' parameter must be provided."
             )
         if rank not in await _fetch_valid_ranks():
-            return (f"Error: Invalid rank '{rank}' provided for GoaT taxon reports."
+            return (f"Error: Invalid rank '{rank}' provided for GoaT taxa reports."
                     f" Valid ranks are: {', '.join(await _fetch_valid_ranks())}.")
 
         url = update_query_string(url, "rank", rank)
 
     # Populate FIELD_CACHE before validation
-    await _fetch_valid_types(search_index)
+    await fetch_valid_types(search_index)
 
     try:
         if x_field:

@@ -3,133 +3,145 @@
 from typing import Any
 
 from ..logging_config import get_logger
+from .helpers.query import set_search_tips
+from .helpers.validation import validate_dict
 
 logger = get_logger(__name__)
 
 
+PROCESS_ATTRIBUTES_PROMPT = """Parse query parameters to form a GoaT URL and return optional count and table.
+
+CRITICAL: ONLY RUN THIS TOOL AFTER PROCESSING IDENTIFIERS WITH process_identifiers()
+          AND ATTRIBUTES WITH process_attributes()!
+          YOU MUST PASS THE UNCHANGED ATTRIBUTES OUTPUT TO THIS TOOL AS INPUT!
+
+FOLLOW THESE STEPS EXACTLY:
+
+1. **attribute_output**: Output of the process_attributes() tool. DO NOT MODIFY IT.
+
+EXAMPLE:
+Query: "How many mammal species have minimum directly measured genome size < 3G?"
+Step 1: process_identifiers() output → IDENTIFIERS_OUTPUT = {
+    "taxa": ["Mammalia"],
+    "assemblies": [],
+    "samples": [],
+    "rank": "species",
+    "intent": "count",
+    "taxon_filter_type": "children",
+    "user_query": "How many mammal species have minimum directly measured genome size < 3G?"
+}
+Step 2: process_attributes() output → attributes_output = {
+    "attributes": [{"name": "genome_size", "operator": "<", "value": "3000000000", "modifier": ["min", "direct"]}],
+    "fields": [],
+    "intent": "count",
+    "taxa": ["Mammalia"],
+    "rank": "species",
+    "taxon_filter_type": "children",
+    "user_query": "How many mammal species have minimum directly measured genome size < 3G?"
+}
+THEN CALL:
+goat_query(
+    attributes_output=attributes_output
+)
+
+"""
+
+EXTRA_DETAILS_PROMPT = """FOLLOW THESE STEPS EXACTLY:
+If intent is table, ALSO PROCESS:
+4. **sort_by**: Attribute name to sort results by, with optional modifier
+
+5. **sort_order**: Sort order - "asc" or "desc"
+
+6. **size**: Result size limit (default 10 for tables, None for counts)
+
+7. **page**: Page number for pagination (default 1)
+
+REMEMBER: ALWAYS PASS THE ORIGINAL IDENTIFIERS OUTPUT AS INPUT TO THIS TOOL!
+
+8. **identifiers_output**: Pass in the identifiers output data structure EXACTLY. DO NOT MODIFY IT.
+
+
+EXAMPLE:
+Query: "How many mammal species have minimum directly measured genome size < 3G?"
+
+Step 1: Attributes → [{"name": "genome_size", "operator": "<", "value": "3000000000", "modifier": ["min", "direct"]}]
+Step 2: Fields → []
+Step 3: Intent → "How many" = "count"
+
+THEN CALL:
+process_attributes(
+    attributes=[{"name": "genome_size", "operator": "<", "value": "3000000000", "modifier": ["min", "direct"]}],
+    fields=[],
+    intent="count",
+    identifiers_output=IDENTIFIERS_OUTPUT
+)
+
+DO NOT CALL unless you've completed all 8 steps above!
+"""
+
+
 async def goat_query(
-    user_query: str,
-    taxon: str | None = None,
-    assembly: str | None = None,
-    sample: str | None = None,
-    rank: str | None = None,
-    attributes: list[dict[str, Any]] | None = None,
-    intent: str = "count",
+    attributes_output: dict[str, Any],
+    # sort_by: str | None = None,
+    # sort_order: str | None = None,
+    # size: int | None = None,
+    # page: int = 1,
 ) -> dict[str, Any]:
-    """Parse a user query into structured components for GoaT API execution.
-
-    🔴 CRITICAL: EXTRACT AND PROVIDE the ID type from your query:
-
-    1. **taxon**: If query is about species/families/genera/orders
-       - Translate common names: "mammal"→"Mammalia", "cat"→"Felis", "dog"→"Canis"
-       - Examples:
-         * "How many mammal species..." → taxon="Mammalia"
-         * "List cat families..." → taxon="Felis"
-         * "Tell me about Canis familiaris" → taxon="Canis familiaris"
-
-    2. **assembly**: If query is about genome assemblies
-       - Provide assembly accession (e.g., "GCF_000002305.6")
-       - Example: "Details on assembly GCF_000002305.6" → assembly="GCF_000002305.6"
-
-    3. **sample**: If query is about DNA/RNA samples
-       - Provide sample accession (e.g., "SRR1234567")
-       - Example: "Show sample SRR1234567" → sample="SRR1234567"
-
-    📋 Extract these ADDITIONAL components:
-
-    4. **rank**: Taxonomic rank if mentioned
-       - Examples: "species", "family", "genus", "order", "class"
-       - Only for taxon-based queries
-
-    5. **attributes**: Attribute filters with modifiers/operators/values
-       - Example: "genome_size < 3G" → [{"name": "genome_size", "operator": "<", "value": "3000000000"}]
-       - Combined modifiers: [{"name": "genome_size", "modifier": ["min", "direct"], "operator": "<", "value": "3G"}]
-
-    6. **intent**: What kind of result
-       - "count": Just the count ("How many...")
-       - "table": List of results ("Which...", "List...")
-       - "histogram": Distribution ("Show distribution...")
-       - "record": Single record details ("Tell me about...")
+    """Parse processed attributes and identifiers into a GoaT URL and optionally return a count and table.
 
     Args:
-        user_query: The original user question (REQUIRED)
-        taxon: Scientific name or taxon ID for species/families/genera queries
-               (e.g., "Mammalia", "Felis", "Canis familiaris", or NCBI ID like "9615")
-               PROVIDE this if query mentions organism/taxon/rank!
-        assembly: Assembly accession for assembly-based queries (e.g., "GCF_000002305.6")
-                  PROVIDE this if query mentions genome assembly!
-        sample: Sample accession for sample-based queries (e.g., "SRR1234567")
-                PROVIDE this if query mentions DNA/RNA sample!
-        rank: Taxonomic rank for taxon queries (e.g., "species", "family", "genus")
-              Only used when taxon is provided
-        attributes: List of attribute filters with optional modifiers/operators/values
-                   Each dict: {"name": "...", "operator": "...", "value": "...", "modifier": ...}
-                   modifier can be string ("missing", "direct") or list (["min", "direct"])
-        intent: Result type - "count" (default), "table", "histogram", or "record"
+        attributes_output: Output from process_attributes() containing all parameters.
+        # sort_by: Optional field to sort results by (e.g., "genome_size")
+        # sort_order: Optional sort order - "asc" or "desc"
+        # size: Optional result size limit (default 10 for tables, None for counts)
+        # page: Optional page number for pagination (default 1)
 
     Returns:
-        dict with parsed components and search result
+        dict with URL, count and result table (if requested)
     """
-    logger.info(f"goat_query called: user_query='{user_query}', taxon={taxon}, assembly={assembly}, "
-                f"sample={sample}, intent={intent}")
 
-    # Determine which ID type was provided
-    search_index = None
-
-    if taxon:
-        search_index = "taxon"
-    elif assembly:
-        search_index = "assembly"
-    elif sample:
-        search_index = "sample"
-    else:
-        # Try to infer from query
-        from .utilities import choose_search_index
-        search_index = await choose_search_index(user_query)
-        logger.info(f"Inferred search_index from query: {search_index}")
-
-    # Log warnings if organism keywords found but no taxon provided
-    if not taxon and search_index == "taxon":
-        organism_keywords = ["mammal", "cat", "dog", "bat", "bird", "fish", "insect", "plant",
-                             "primate"]
-        if any(kw in user_query.lower() for kw in organism_keywords):
-            logger.warning(f"⚠️ Query mentions organism but taxon not provided: '{user_query}'")
-            msg = ("Did you mean to extract: 'mammal'→'Mammalia', 'cat'→'Felis', "
-                   "'dog'→'Canis'?")
-            logger.warning(msg)
-
-    # Structure the parsed components
-    parsed = {
-        "taxon": taxon,
-        "assembly": assembly,
-        "sample": sample,
-        "rank": rank,
-        "attributes": attributes or [],
-        "intent": intent,
-        "search_index": search_index,
-    }
-
-    logger.info(f"Parsed components: {parsed}")
+    if not validate_dict(attributes_output):
+        raise ValueError(
+            "Invalid attributes_output provided to goat_query().\n"
+            "Ensure you pass the EXACT output from process_attributes() without modification."
+        )
 
     # Import here to avoid circular dependency
     from .search import goat_advanced_search
 
     # Delegate to goat_advanced_search with the parsed components
     result = await goat_advanced_search(
-        user_query=user_query,
-        search_index=search_index,
-        taxon=taxon,
-        rank=rank,
-        attributes=attributes,
-        show_table=(intent == "table"),
-        size=10 if intent == "table" else None,
+        user_query=attributes_output.get("user_query", ""),
+        search_index=attributes_output.get("search_index", "taxon"),
+        taxa=attributes_output.get("taxa"),
+        taxon_filter_type=attributes_output.get("taxon_filter_type"),
+        assemblies=attributes_output.get("assemblies"),
+        samples=attributes_output.get("samples"),
+        rank=attributes_output.get("rank"),
+        attributes=attributes_output.get("attributes"),
+        fields=attributes_output.get("fields"),
+        show_table=(attributes_output.get("intent") == "table"),
+        size=attributes_output.get("size") if attributes_output.get("intent") == "table" else None,
+        sort_by=attributes_output.get("sort_by"),
+        sort_order=attributes_output.get("sort_order"),
+        page=attributes_output.get("page"),
+    )
+
+    search_tips = set_search_tips(
+        attributes_output.get("attributes"),
+        attributes_output.get("fields"),
+        attributes_output.get("intent"),
     )
 
     return {
-        "parsed_components": parsed,
-        "user_query": user_query,
+        "user_query": attributes_output.get("user_query", ""),
         "result": result,
+        "search_tips": search_tips,
     }
+
+
+# Set the runtime docstring / tool description to the selected LLM prompt.
+goat_query.__doc__ = PROCESS_ATTRIBUTES_PROMPT
 
 
 def register_tools(mcp) -> None:

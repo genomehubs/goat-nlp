@@ -23,7 +23,12 @@ from .formatting import (
 )
 
 # Re-export query building functions
-from .query import build_query_string, format_attributes, set_exclusions
+from .query import (
+    build_query_string,
+    format_attributes,
+    set_exclusions,
+    set_search_tips,
+)
 
 # Re-export URL utilities
 from .urls import update_query_string
@@ -58,6 +63,7 @@ __all__ = [
     "build_query_string",
     "format_attributes",
     "set_exclusions",
+    "set_search_tips",
     # URL utilities
     "update_query_string",
     # Validation

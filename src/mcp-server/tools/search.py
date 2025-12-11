@@ -1,12 +1,11 @@
 from ..logging_config import get_logger
-from .attributes import FIELD_CACHE, _fetch_valid_types
 from .helpers.api import make_goat_request
-from .helpers.constants import GOAT_API_BASE, GOAT_DESCRIPTION
+from .helpers.constants import FIELD_CACHE, GOAT_API_BASE, GOAT_DESCRIPTION
+from .helpers.fetch import fetch_valid_types
 from .helpers.formatting import format_result_table, rank_description
 from .helpers.query import build_query_string, process_modifiers, set_exclusions
-from .helpers.validation import (
+from .helpers.validation import (  # validate_attribute_names,
     validate_attribute_name,
-    validate_attribute_names,
     validate_attributes,
 )
 
@@ -15,20 +14,24 @@ logger = get_logger(__name__)
 
 async def goat_advanced_search(
     search_index: str = "taxon",
-    taxon: str | None = None,
+    taxa: list[str] | None = None,
+    taxon_filter_type: str = "children",
+    assemblies: list[str] | None = None,
+    samples: list[str] | None = None,
     rank: str | None = None,
     attributes: list[dict] | None = None,
-    fields: list[str] | None = None,
+    fields: list[dict] | None = None,
     sort_by: str | None = None,
     sort_order: str | None = None,
     show_table: bool = False,
     size: int = 5,
+    page: int = 1,
     user_query: str | None = None,
 ) -> str:
     """Advanced search for GoaT - EXPERT USE ONLY.
 
     ⚠️ RECOMMENDATION: Use goat_query instead for 95% of queries!
-    
+
     goat_query is the recommended tool that handles GoaT-specific edge cases,
     modifier processing, and automatic parameter inference. Only use this
     goat_advanced_search tool if you need explicit control over all parameters
@@ -68,17 +71,18 @@ async def goat_advanced_search(
 
     Query Types by search_index:
     - taxon (default): Query taxonomic data
-        * Can use: taxon, rank, and/or attributes
+        * Can use: taxa, rank, and/or attributes
         * Examples: "species in Mammalia", "families with assemblies"
     - assembly: Query genome assemblies
-        * Can use: taxon, and/or attributes (rank less common)
+        * Can use: taxa, and/or attributes (rank less common)
         * Examples: "assemblies with chromosome-level quality"
     - sample: Query sequencing samples
-        * Can use: taxon, and/or attributes (rank less common)
+        * Can use: taxa, and/or attributes (rank less common)
         * Examples: "samples with RNA-seq data"
 
-    CRITICAL - Using the taxon parameter:
+    CRITICAL - Using the taxa parameter:
     - ALWAYS use scientific names (e.g., "Mammalia", "Felidae", "Canis")
+    - Prefer lists of names for multiple taxa (e.g., ["Felis", "Canis"])
     - If the user provides a common name (e.g., "mammals", "cats", "dogs"),
       you MUST first translate it to a scientific name:
       * "mammals" → "Mammalia"
@@ -86,7 +90,7 @@ async def goat_advanced_search(
       * "dogs" → "Canidae" (family) or "Canis" (genus)
     - RECOMMENDED: Use check_taxon_exists tool to validate the scientific name
       before calling search_goat, especially for unfamiliar taxa or when uncertain.
-    - The taxon parameter supports:
+    - The taxa parameter supports:
       * Scientific names (default)
       * Taxon IDs
       * Partial names with wildcard * (e.g., "Canis*")
@@ -107,7 +111,7 @@ async def goat_advanced_search(
     - User keywords indicating OR: "either", "or", "any of", "in any"
 
     - Taxon names: comma-separated names = OR. IMPORTANT: it is more efficient to
-        search with a comma-separated list of taxon names (up to 100 at a time) than
+        search with a list of taxa names (up to 100 at a time) than
         to do multiple separate queries.
     - Prefix values with '!' for NOT. Works with keyword attributes and taxon names.
     - If the only value(s) for a keyword attribute is negated (e.g., '!value'),
@@ -148,7 +152,7 @@ async def goat_advanced_search(
                       - "assembly" for genome assemblies only
                       - "sample" for sequencing samples only
                       Use choose_search_index tool if uncertain.
-        taxon: Optional taxonomic scope (scientific name, taxon ID, etc.)
+        taxa: Optional taxonomic scope (scientific name, taxon ID, etc.)
         rank: Optional taxonomic rank filter (e.g., species, genus, family, order, class, phylum)
               NOTE: If not provided but present in user_query, will be auto-extracted.
         attributes: Optional list of attribute filters, each with 'name'
@@ -159,13 +163,14 @@ async def goat_advanced_search(
         sort_order: Optional sort order ('asc' or 'desc', default: 'asc')
         show_table: Whether to show results in a table format (default: False shows count)
         size: Number of rows to include in the table if show_table is True (default: 5)
+        page: Page number for pagination (default: 1)
         user_query: Original user query - helps auto-extract rank if not explicitly provided.
                     CRITICAL: ALWAYS provide the original user query string here.
     """
-    logger.info(f"search_goat called: index={search_index}, taxon={taxon}, rank={rank}, "
+    logger.info(f"search_goat called: index={search_index}, taxa={taxa}, rank={rank}, "
                 f"attributes={attributes}, fields={fields}, sort_by={sort_by}, "
                 f"sort_order={sort_order}, show_table={show_table}, size={size}, "
-                f"user_query={user_query}")
+                f"page={page}, user_query={user_query}")
 
     # Validate that user_query is provided
     if user_query is None or not user_query.strip():
@@ -211,7 +216,7 @@ Please retry the call with the user_query parameter included."""
                 break
 
     # Warn if rank might be missing for taxon queries
-    if search_index == "taxon" and rank is None and (taxon is not None or attributes is not None):
+    if search_index == "taxon" and rank is None and (taxa is not None or attributes is not None):
         logger.warning(
             "IMPORTANT: search_goat called with search_index='taxon' but no rank parameter. "
             "If the user query mentions a taxonomic rank (species, genus, family, order, etc.), "
@@ -219,14 +224,14 @@ Please retry the call with the user_query parameter included."""
         )
 
     # Populate FIELD_CACHE before validation
-    await _fetch_valid_types(search_index)
+    await fetch_valid_types(search_index)
 
     try:
         if attributes is not None:
             attributes = validate_attributes(attributes, search_index, FIELD_CACHE)
         if fields is not None:
-            fields = validate_attribute_names(fields, search_index, FIELD_CACHE)
-        if sort_by is not None:
+            fields = validate_attributes(fields, search_index, FIELD_CACHE, is_field=True)
+        if sort_by is not None and sort_by != "":
             sort_by = validate_attribute_name(sort_by, search_index, FIELD_CACHE)
     except ValueError as ve:
         logger.error(f"Attribute validation error: {ve}")
@@ -235,13 +240,13 @@ Please retry the call with the user_query parameter included."""
 Please check attribute names, operators, and values against GoaT metadata
 using the get_attribute_selection_context or get_valid_types tools.
 """
-    
+
     # Process modifiers: convert status-based modifiers to exclusions, keep summary modifiers in attributes
     if attributes is not None:
         attributes = process_modifiers(attributes)
         logger.info(f"Processed modifiers in {len(attributes)} attributes")
-    
-    query_string = build_query_string(taxon, rank, attributes)
+
+    query_string = build_query_string(taxa, rank, attributes, assemblies, samples, taxon_filter_type)
     exclusions = set_exclusions(attributes)
     logger.info(f"Built query_string: {query_string}")
     logger.info(f"Built exclusions: {exclusions}")
@@ -251,16 +256,26 @@ using the get_attribute_selection_context or get_valid_types tools.
     if query_string:
         url = (
             f"{GOAT_API_BASE}/{endpoint}?query={query_string}"
-            f"&result={search_index}&offset=0&includeEstimates=true&taxonomy=ncbi"
+            f"&result={search_index}"
             f"{exclusions}"
         )
     else:
         # Empty query - count/show all records in index
-        url = f"{GOAT_API_BASE}/{endpoint}?result={search_index}&offset=0&includeEstimates=true&taxonomy=ncbi"
-
-    url += f"&size={size}&report=sources"
+        url = f"{GOAT_API_BASE}/{endpoint}?result={search_index}"
+    if size is not None:
+        url += f"&size={size}&offset={(page - 1) * size}"
+    url += "&includeEstimates=true&taxonomy=ncbi&report=sources"
     if fields:
-        url += "&fields=" + "%2C".join(fields)
+        parsed_fields = []
+        for field in fields:
+            parsed_fields.append(field['name'])
+            if "modifier" in field:
+                for mod in field["modifier"]:
+                    if mod not in ["min", "max", "direct", "descendant", "ancestral", "missing"]:
+                        logger.warning(f"Ignoring invalid modifier '{mod}' for field '{field['name']}'")
+                        continue
+                    parsed_fields.append(f"{field['name']}%3A{mod}")
+        url += "&fields=" + "%2C".join(parsed_fields)
     if sort_by:
         url += f"&sortBy={sort_by}"
         if sort_order and sort_order.lower() in ["asc", "desc"]:
@@ -280,10 +295,10 @@ using the get_attribute_selection_context or get_valid_types tools.
         count = data.get("count", 0)
         search_url = url.replace("/api/v2", "").replace("count?", "search?")
 
-    if taxon and rank:
-        description = f"{count} {rank_description(rank)} within {taxon}"
-    elif taxon:
-        description = f"{count} records within {taxon}"
+    if taxa and rank:
+        description = f"{count} {rank_description(rank)} within {','.join(taxa)}"
+    elif taxa:
+        description = f"{count} records within {','.join(taxa)}"
     elif rank:
         description = f"{count} {rank_description(rank)}"
     else:
@@ -311,7 +326,7 @@ supplemented by additional metadata from the GoaT database.
 """
 
     if show_table:
-        return f"""
+        result += f"""
 
 This table shows the top {size} results.
 

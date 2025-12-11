@@ -1,44 +1,10 @@
-import time
 from typing import Any
 
 from ..logging_config import get_logger
-from .helpers.api import make_goat_request
-from .helpers.constants import GOAT_API_BASE, GOAT_DESCRIPTION
+from .helpers.constants import GOAT_DESCRIPTION
+from .helpers.fetch import fetch_valid_types
 
 logger = get_logger(__name__)
-FIELD_CACHE: dict[str, Any] = {}
-_FIELD_CACHE_TIMESTAMP: dict[str, float] = {}
-_FIELD_CACHE_TTL_SECONDS = 24 * 60 * 60  # 24 hours
-
-
-async def _fetch_valid_types(search_index: str = "taxon") -> dict[str, Any]:
-    """Internal function to fetch valid attribute types from GoaT API.
-
-    Uses in-memory cache with 24-hour TTL to avoid repeated API calls.
-
-    Args:
-        search_index: Index type (default: taxon)
-    """
-    global FIELD_CACHE, _FIELD_CACHE_TIMESTAMP
-    # Check if we have a valid cached response
-    current_time = time.time()
-    if search_index in FIELD_CACHE and search_index in _FIELD_CACHE_TIMESTAMP:
-        cache_age = current_time - _FIELD_CACHE_TIMESTAMP[search_index]
-        if cache_age < _FIELD_CACHE_TTL_SECONDS:
-            return FIELD_CACHE[search_index]
-
-    # Cache miss or expired - fetch from API
-    url = f"{GOAT_API_BASE}/resultFields?index={search_index}"
-    data = await make_goat_request(url)
-    if not data or "fields" not in data:
-        return {}
-
-    # Store in cache
-    fields = data["fields"]
-    FIELD_CACHE[search_index] = fields
-    _FIELD_CACHE_TIMESTAMP[search_index] = current_time
-
-    return fields
 
 
 async def get_valid_types(search_index: str = "taxon") -> dict[str, Any]:
@@ -47,7 +13,7 @@ async def get_valid_types(search_index: str = "taxon") -> dict[str, Any]:
     Args:
         search_index: Index type (default: taxon)
     """
-    return await _fetch_valid_types(search_index)
+    return await fetch_valid_types(search_index)
 
 
 async def get_metadata_for_attribute(
@@ -59,7 +25,7 @@ async def get_metadata_for_attribute(
         attribute: Name of the attribute to get metadata for
         search_index: Index type (default: taxon)
     """
-    fields = await _fetch_valid_types(search_index)
+    fields = await fetch_valid_types(search_index)
     if not fields:
         return {}
 
@@ -76,7 +42,7 @@ async def _get_attribute_context_internal(
 
     This is called by both the resource and the tool.
     """
-    fields = await _fetch_valid_types(search_index)
+    fields = await fetch_valid_types(search_index)
     if not fields:
         return {}
 
@@ -136,18 +102,18 @@ async def get_attribute_selection_context(
         search_index: Index type (default: taxon)
     """
     logger.info(f"get_attribute_selection_context called: keyword='{keyword}', search_index={search_index}")
-    
+
     # Check for keywords that need disambiguation guidance
     keyword_lower = keyword.lower()
     disambiguation_guidance = None
-    
+
     # Detect project-related queries that might confuse target_list vs sequencing_status
     project_keywords = ["dtol", "canbp", "vgp", "ebp", "project", "target", "list", "long_list"]
     status_keywords = ["sequencing", "status", "progress", "completed", "data", "available"]
-    
+
     has_project_keyword = any(kw in keyword_lower for kw in project_keywords)
     has_status_keyword = any(kw in keyword_lower for kw in status_keywords)
-    
+
     if has_project_keyword or has_status_keyword:
         disambiguation_guidance = """
 ⚠️  DISAMBIGUATION GUIDANCE - Read this first!
@@ -156,7 +122,7 @@ If asking which species are ON a target list:
   → Use: long_list attribute
   → Values: dtol, canbp, vgp, ebp, etc.
   → Example: "How many species are on the DToL target list?" → long_list=dtol
-  
+
 If asking about sequencing STATUS/PROGRESS:
   → Use: sequencing_status_dtol, sequencing_status_canbp, etc.
   → Values: completed, in_progress, planned, etc.
@@ -165,11 +131,11 @@ If asking about sequencing STATUS/PROGRESS:
 Common confusion:
   ✗ WRONG: "species on dtol list" → sequencing_status_dtol
   ✓ RIGHT: "species on dtol list" → long_list=dtol
-  
-  ✗ WRONG: "species with completed dtol sequencing" → long_list=dtol  
+
+  ✗ WRONG: "species with completed dtol sequencing" → long_list=dtol
   ✓ RIGHT: "species with completed dtol sequencing" → sequencing_status_dtol=completed
 """
-    
+
     # Detect protected/conservation status queries
     if "protected" in keyword_lower or "conservation" in keyword_lower:
         disambiguation_guidance = """
@@ -178,21 +144,21 @@ Common confusion:
 For legal protection status:
   → Use: protected_status attribute
   → Example: "Which species have protected status?"
-  
+
 For threat/conservation level:
-  → Use: conservation_status attribute  
+  → Use: conservation_status attribute
   → Example: "Which species are endangered?"
 """
-    
+
     result = await _get_attribute_context_internal(keyword, search_index)
-    
+
     # Add disambiguation guidance at the top of the result if present
     if disambiguation_guidance:
         result = {
             "IMPORTANT_READ_FIRST": disambiguation_guidance,
             **result
         }
-    
+
     logger.info(f"Found {len(result.get('attributes', []))} matching attributes")
     return result
 

@@ -15,7 +15,7 @@ async def goat_simple_search(
     """Simple search interface for basic GoaT queries.
 
     ⚠️ RECOMMENDATION: Use goat_query for better results!
-    
+
     goat_query provides better handling of complex queries, modifiers, and
     edge cases. Only use goat_simple_search for the most basic queries.
 

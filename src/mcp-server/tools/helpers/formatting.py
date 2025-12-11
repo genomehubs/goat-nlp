@@ -21,7 +21,7 @@ def rank_description(rank: str) -> str:
     }.get(rank, f"{rank} level taxa")
 
 
-def format_count(result: dict, taxon: str = "", rank: str = "", url: str = "") -> str:
+def format_count(result: dict, taxa: list[str] | None = None, rank: str = "", url: str = "") -> str:
     """Format count into a readable string with GoaT context."""
     count = result.get("count", 0)
 
@@ -31,7 +31,7 @@ def format_count(result: dict, taxon: str = "", rank: str = "", url: str = "") -
     )
     return f"""
 According to {GOAT_DESCRIPTION}, there are {count} {rank_description(rank)} \
-within {taxon}.
+within {', '.join(taxa) if taxa else "all taxa"}.
 
 This count is based on taxa with sequence data from the NCBI taxonomy,
 supplemented by additional metadata from the GoaT database.
@@ -133,11 +133,11 @@ def format_result_table(
                 columns.append("taxon_rank")
             if "fields" in record:
                 columns.extend(record["fields"].keys())
-            if search_fields:
-                # Ensure requested fields are included
-                for field in search_fields:
-                    if field not in columns:
-                        columns.append(field)
+            # if search_fields:
+            #     # Ensure requested fields are included
+            #     for field in search_fields:
+            #         if field not in columns:
+            #             columns.append(field)
             # Build header
             header = "| " + " | ".join(columns) + " |"
             separator = "| " + " | ".join(["---"] * len(columns)) + " |"

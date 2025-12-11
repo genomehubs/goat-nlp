@@ -1,9 +1,9 @@
 from typing import Any
 
 from ..logging_config import get_logger
-from .attributes import FIELD_CACHE, _fetch_valid_types
 from .helpers.api import make_goat_request
-from .helpers.constants import GOAT_API_BASE
+from .helpers.constants import FIELD_CACHE, GOAT_API_BASE
+from .helpers.fetch import fetch_valid_types
 from .helpers.formatting import format_record
 from .helpers.validation import validate_attribute_names
 
@@ -17,6 +17,9 @@ async def get_goat_record(
     truncate: bool = True,
 ) -> Any:
     """Get a single record from GoaT.
+
+     ⚠️ RECOMMENDATION: IF the user query involves multiple records or complex
+     filters, Use goat_query instead to retrieve a table for 95% of queries!
 
     An LLM can use this to fetch detailed information about a specific record.
     the record ID can be a taxon ID, assembly accession, or sample ID depending
@@ -53,7 +56,7 @@ async def get_goat_record(
         truncate: Whether to truncate long lists of attribute values (default: True)
     """
     # Populate FIELD_CACHE before validation
-    await _fetch_valid_types(search_index)
+    await fetch_valid_types(search_index)
 
     try:
         if attributes is not None:

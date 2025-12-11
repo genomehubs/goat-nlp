@@ -36,19 +36,22 @@ Q: "Tell me about assembly GCF_000002305.6"
                     "description": "Original question (required for backend processing)",
                 },
                 "taxon": {
-                    "type": "string",
+                    "type": "array",
                     "description": (
                         "Scientific name or taxon ID for species/families/genera queries "
-                        "(e.g., 'Mammalia', 'Felis', '9615')"
+                        "(e.g., ['Mammalia'], ['Felis'], ['9615'])"
                     ),
+                    "items": {"type": "string"},
                 },
                 "assembly": {
-                    "type": "string",
-                    "description": "Assembly accession for assembly queries (e.g., 'GCF_000002305.6')",
+                    "type": "array",
+                    "description": "Assembly accession for assembly queries (e.g., ['GCF_000002305.6'])",
+                    "items": {"type": "string"},
                 },
                 "sample": {
-                    "type": "string",
-                    "description": "Sample accession for sample queries (e.g., 'SRR1234567')",
+                    "type": "array",
+                    "description": "Sample accession for sample queries (e.g., ['SRR1234567'])",
+                    "items": {"type": "string"},
                 },
                 "rank": {
                     "type": "string",
