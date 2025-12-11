@@ -5,25 +5,22 @@ from typing import Any
 from ..logging_config import get_logger
 from .helpers.constants import FIELD_CACHE
 from .helpers.fetch import fetch_valid_types
-from .helpers.validation import (
-    hash_dict,
-    validate_attribute_name,
-    validate_attributes,
-    validate_dict,
-)
+from .helpers.validation import hash_dict, set_search_index, validate_attributes
+from .utilities import fetch_valid_ranks
 
 logger = get_logger(__name__)
 
 PROCESS_ATTRIBUTES_PROMPT = """Process and validate attribute-related query parameters for GoaT API queries.
-
-CRITICAL: ONLY RUN THIS TOOL AFTER PROCESSING IDENTIFIERS WITH process_identifiers()!
-          YOU MUST PASS THE UNCHANGED IDENTIFIERS OUTPUT TO THIS TOOL AS INPUT!
 
 Follow the procedure below to extract and format the attributes correctly. Ignore any other information, this
 will be handled in other steps.
 
 IMPORTANT: names passed to attributes, fields and sortby MUST be valid attribute names.
 You can check attribute names using get_attribute_selection_context() if needed.
+
+REMEMBER: A user query may request multiple attributes, fields, names, and ranks.
+An LLM MUST be decide if a name is an attribute filter, a field to return, a taxon name class, or a taxonomic rank
+based on the context of the user query.
 
 FOLLOW THESE STEPS EXACTLY:
 
@@ -69,74 +66,66 @@ FOLLOW THESE STEPS EXACTLY:
    - "Give me minimum genome_size and directly measured assembly_level" → [{"name": "genome_size", "modifier":
      ["min"]}, {"name": "assembly_level", "modifier": ["direct"]}]
 
-3. **intent**: What kind of result
-   - "count": "How many..." (count species)
-   - "table": "Which...", "List..." (show results)
+3. **names**: Taxon name classes to include in the response.
+   Examples:
+   - "show scientific names ..." → ["scientific_name"]
+   - "return common name and synonym for ..." → ["common_name", "synonym"]
+   - "list the tolid prefix and authority for ..." → ["tolid_prefix", "other_name"]
 
-If intent is table, ALSO PROCESS:
-4. **sort_by**: Attribute name to sort results by, with optional modifier
+4. **ranks**: Taxonomic ranks to include in the response.
+   These are ranks that the user request to be returned as fields.
+   There is no need to include a rank used for filtering unless it is also requested as a field.
+   IMPORTANT these MUST be valid rank names (Use get_valid_ranks() to check) for unusual ranks.
+   Always use singular forms.
+   Examples:
+   - "return the species ..." → ["species"]
+   - "get me the genus and family ..." → ["genus", "family"]
 
-5. **sort_order**: Sort order - "asc" or "desc"
-
-6. **size**: Result size limit (default 10 for tables, None for counts)
-
-7. **page**: Page number for pagination (default 1)
-
-REMEMBER: ALWAYS PASS THE ORIGINAL IDENTIFIERS OUTPUT AS INPUT TO THIS TOOL!
-
-8. **identifiers_output**: Pass in the identifiers output data structure EXACTLY. DO NOT MODIFY IT.
-
+5. **user_query**: Copy the original question EXACTLY. DO NOT MODIFY IT.
 
 EXAMPLE:
 Query: "How many mammal species have minimum directly measured genome size < 3G?"
 
 Step 1: Attributes → [{"name": "genome_size", "operator": "<", "value": "3000000000", "modifier": ["min", "direct"]}]
 Step 2: Fields → []
-Step 3: Intent → "How many" = "count"
+Step 3: Names → []
+Step 4: Ranks → []
+Step 5: user_query → Copy exactly
 
 THEN CALL:
 process_attributes(
     attributes=[{"name": "genome_size", "operator": "<", "value": "3000000000", "modifier": ["min", "direct"]}],
     fields=[],
-    intent="count",
-    identifiers_output=IDENTIFIERS_OUTPUT
+    names=[],
+    ranks=[],
+    user_query="How many mammal species have minimum directly measured genome size < 3G?"
 )
 
-DO NOT CALL unless you've completed all 8 steps above!
+DO NOT CALL unless you've completed all 5 steps above!
 """
 
 
 async def process_attributes(
     attributes: list[dict[str, Any]],
     fields: list[dict[str, Any]],
-    intent: str,
-    identifiers_output: dict[str, Any],
-    sort_by: str | None = None,
-    sort_order: str | None = None,
-    size: int | None = None,
-    page: int = 1,
+    user_query: str,
+    names: list[str] | None = None,
+    ranks: list[str] | None = None,
 ) -> dict[str, Any]:
     """Process and validate attribute-related query parameters.
 
     Args:
         attributes: List of attribute filter dicts with 'name' and optional 'operator', 'value', and 'modifier'.
         fields: List of attribute field dicts with 'name' and optional 'modifier'.
-        intent: Result type - "count" (default), "table", "histogram", or "record"
-        identifiers_output: Output from process_identifiers() containing identifier-related parameters.
-        sort_by: Optional field to sort results by (e.g., "genome_size")
-        sort_order: Optional sort order - "asc" or "desc"
-        size: Optional result size limit (default 10 for tables, None for counts)
-        page: Optional page number for pagination (default 1)
+        user_query: The original user question
+        names: Optional list of taxon name classes to include in the response.
+        ranks: Optional list of taxonomic ranks to include in the response.
 
     Returns:
         A dictionary with processed attributes for GoaT API queries.
 """
-    if not validate_dict(identifiers_output):
-        raise ValueError("""Invalid identifiers_output provided to process_attributes().
 
-Ensure you pass the EXACT output from process_identifiers() without modification.""")
-
-    search_index = identifiers_output.get("search_index", "taxon")
+    search_index = await set_search_index([], [], [], user_query) or "taxon"
 
     # Populate FIELD_CACHE before validation
     await fetch_valid_types(search_index)
@@ -146,8 +135,6 @@ Ensure you pass the EXACT output from process_identifiers() without modification
             validate_attributes(attributes, search_index=search_index, field_cache=FIELD_CACHE)
         if fields:
             validate_attributes(fields, search_index=search_index, field_cache=FIELD_CACHE)
-        if sort_by:
-            validate_attribute_name(sort_by, search_index, FIELD_CACHE)
     except ValueError as e:
         raise ValueError(
             f"""Validation error in process_attributes(): {e}
@@ -156,15 +143,68 @@ Ensure attribute and field names are valid for the '{search_index}' index.
 You can check valid attribute names using get_attribute_selection_context()."""
         ) from e
 
+    valid_names = {"scientific_name", "common_name", "synonym", "tolid_prefix", "authority"}
+    if names:
+        for name in names:
+            if name not in valid_names:
+                raise ValueError(
+                    f"""Invalid name '{name}' provided to process_attributes().
+Valid names are: {', '.join(valid_names)}."""
+                )
+    if ranks:
+        valid_ranks = await fetch_valid_ranks()
+        for rank in ranks:
+            if rank not in valid_ranks:
+                raise ValueError(
+                    f"""Invalid rank '{rank}' provided to process_attributes().
+Valid ranks are: {', '.join(valid_ranks)}."""
+                )
+
+    # Ensure fields is a list
+    fields = fields or []
+
+    # Build a map of existing fields by name to avoid duplicates and preserve order
+    fields_by_name: dict[str, dict[str, Any]] = {}
+    ordered_field_names: list[str] = []
+    for f in fields:
+        name = f.get("name")
+        if not name:
+            continue
+        mods = f.get("modifier", [])
+        if isinstance(mods, str):
+            mods = [mods]
+        # preserve order and uniqueness
+        mods = list(dict.fromkeys(mods))
+        fields_by_name[name] = {"name": name, "modifier": mods}
+        ordered_field_names.append(name)
+
+    # Merge attributes into fields, adding modifiers without creating duplicates
+    for attr in attributes or []:
+        name = attr.get("name")
+        if not name:
+            continue
+        mods = attr.get("modifier", [])
+        if isinstance(mods, str):
+            mods = [mods]
+
+        if name not in fields_by_name:
+            fields_by_name[name] = {"name": name, "modifier": []}
+            ordered_field_names.append(name)
+
+        existing_mods = fields_by_name[name].setdefault("modifier", [])
+        for m in mods:
+            if m not in existing_mods:
+                existing_mods.append(m)
+
+    # Rebuild the fields list preserving original order, then new fields
+    new_fields: list[dict[str, Any]] = [fields_by_name[name] for name in ordered_field_names]
+
     result: dict[str, Any] = {
-        **identifiers_output,
         "attributes": attributes,
-        "fields": fields,
-        "intent": intent,
-        "sort_by": sort_by if sort_by is not None else None,
-        "sort_order": sort_order if sort_order is not None else "asc",
-        "size": size if size is not None else 0,
-        "page": page,
+        "fields": new_fields,
+        "user_query": user_query,
+        "names": names or [],
+        "ranks": ranks or [],
     }
 
     dict_hash = hash_dict(result)

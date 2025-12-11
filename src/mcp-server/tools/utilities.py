@@ -3,21 +3,21 @@ import time
 from .helpers.api import make_goat_request
 from .helpers.constants import GOAT_API_BASE
 
-_RANK_CACHE: list[str] = []
+RANK_CACHE: list[str] = []
 _RANK_CACHE_TIMESTAMP: float = 0.0
 RANK_CACHE_TTL_SECONDS = 24 * 60 * 60  # 24 hours
 
 
-async def _fetch_valid_ranks() -> list[str]:
+async def fetch_valid_ranks() -> list[str]:
     """Internal function to fetch valid taxon ranks from GoaT API.
 
     Uses in-memory cache with 24-hour TTL to avoid repeated API calls."""
-    global _RANK_CACHE, _RANK_CACHE_TIMESTAMP
+    global RANK_CACHE, _RANK_CACHE_TIMESTAMP
     # Check if we have a valid cached response
     current_time = time.time()
     cache_age = current_time - _RANK_CACHE_TIMESTAMP
     if cache_age < RANK_CACHE_TTL_SECONDS:
-        return _RANK_CACHE
+        return RANK_CACHE
 
     # Cache miss or expired - fetch from API
     url = f"{GOAT_API_BASE}/taxonomicRanks"
@@ -27,7 +27,7 @@ async def _fetch_valid_ranks() -> list[str]:
 
     # Store in cache
     ranks = data["ranks"]
-    _RANK_CACHE = ranks
+    RANK_CACHE = ranks
     _RANK_CACHE_TIMESTAMP = current_time
 
     return ranks
@@ -35,7 +35,7 @@ async def _fetch_valid_ranks() -> list[str]:
 
 async def get_valid_ranks() -> list[str]:
     """Fetch valid taxon ranks from GoaT API."""
-    return await _fetch_valid_ranks()
+    return await fetch_valid_ranks()
 
 
 async def get_example_queries(category: str = "all") -> str:

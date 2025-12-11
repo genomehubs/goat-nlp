@@ -3,6 +3,7 @@ from typing import Any
 from ..logging_config import get_logger
 from .helpers.constants import GOAT_DESCRIPTION
 from .helpers.fetch import fetch_valid_types
+from .utilities import fetch_valid_ranks
 
 logger = get_logger(__name__)
 
@@ -20,6 +21,12 @@ async def get_metadata_for_attribute(
     attribute: str, search_index: str = "taxon"
 ) -> dict[str, Any]:
     """Get metadata for a specific attribute in GoaT.
+
+    ONLY use this to get detailed information about a single attribute,
+    such as its description, type, and possible values. If you are unsure if an attribute exists or
+    which attributes to use for filtering, use get_attribute_selection_context().
+
+    DO NOT use this tool to guess attribute names or validate multiple attributes at once.
 
     Args:
         attribute: Name of the attribute to get metadata for
@@ -42,13 +49,20 @@ async def _get_attribute_context_internal(
 
     This is called by both the resource and the tool.
     """
+    valid_names = {
+        "scientific name": "scientific_name",
+        "common name": "common_name",
+        "synonym": "synonym",
+        "tolid prefix": "tolid_prefix",
+        "tolid": "tolid_prefix",
+        "authority": "authority"}
     fields = await fetch_valid_types(search_index)
     if not fields:
         return {}
 
     # Split keyword into individual words for matching
     keyword_lower = keyword.lower()
-    keyword_words = set(keyword_lower.split())
+    keyword_words = set(keyword_lower.replace("_", " ").split())
 
     attributes = []
     for name, field in fields.items():
@@ -63,12 +77,24 @@ async def _get_attribute_context_internal(
 
         # Check for complete phrase match first (higher priority)
         if keyword_lower in search_text:
-            attr_info = {"name": name, **field}
+            attr_info = {"name": name, "name_type": "attribute", **field}
             attributes.append(attr_info)
         # If no phrase match, check if any individual words match
         elif keyword_words and any(word in search_text for word in keyword_words if len(word) > 2):
-            attr_info = {"name": name, **field}
+            attr_info = {"name": name, "name_type": "attribute", **field}
             attributes.append(attr_info)
+
+    # Also check valid names
+    if keyword_lower.replace("_", " ") in valid_names:
+        attr_info = {"name": valid_names[keyword_lower.replace("_", " ")], "name_type": "name"}
+        attributes.append(attr_info)
+
+    # Also check valid ranks
+    valid_ranks = await fetch_valid_ranks()
+    logger.info(f"Checking keyword '{keyword_lower}' against valid ranks: {valid_ranks}")
+    if keyword_lower in (rank.lower() for rank in valid_ranks):
+        attr_info = {"name": keyword_lower, "name_type": "rank"}
+        attributes.append(attr_info)
 
     return {
         "description": GOAT_DESCRIPTION,
@@ -94,8 +120,14 @@ async def get_attribute_selection_context(
     based on a user query. The LLM MUST always check whether an attribute
     exists before using it in a query.
 
+    The LLM must check the returned 'name_type' for each attribute to
+    determine whether it is an 'attribute', a 'name', or a 'rank'.
+
     IMPORTANT: This function provides special disambiguation guidance when
     keywords suggest confusion between target lists and sequencing status.
+
+    IMPORTANT: If you do not get results with a keyword search, try different
+    keywords or use a descriptive phrase to expand your search.
 
     Args:
         keyword: Keyword to guide attribute selection
@@ -169,6 +201,6 @@ def register_tools(mcp) -> None:
     Args:
         mcp: FastMCP instance to register tools with
     """
-    mcp.tool()(get_valid_types)
+    # mcp.tool()(get_valid_types)
     mcp.tool()(get_metadata_for_attribute)
     mcp.tool()(get_attribute_selection_context)

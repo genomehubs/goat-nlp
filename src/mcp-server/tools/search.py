@@ -21,6 +21,8 @@ async def goat_advanced_search(
     rank: str | None = None,
     attributes: list[dict] | None = None,
     fields: list[dict] | None = None,
+    names: list[str] | None = None,
+    ranks: list[str] | None = None,
     sort_by: str | None = None,
     sort_order: str | None = None,
     show_table: bool = False,
@@ -280,6 +282,10 @@ using the get_attribute_selection_context or get_valid_types tools.
         url += f"&sortBy={sort_by}"
         if sort_order and sort_order.lower() in ["asc", "desc"]:
             url += f"&sortOrder={sort_order.lower()}"
+    if names:
+        url += "&names=" + "%2C".join(names)
+    if ranks:
+        url += "&ranks=" + "%2C".join(ranks)
 
     data = await make_goat_request(url)
 
@@ -315,6 +321,8 @@ using the get_attribute_selection_context or get_valid_types tools.
         table = format_result_table(
             data["results"],
             search_fields=fields or [],
+            search_names=names or [],
+            search_ranks=ranks or [],
             search_url=search_url,
         )
 

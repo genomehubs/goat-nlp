@@ -5,7 +5,7 @@ from .helpers.fetch import fetch_valid_types
 from .helpers.formatting import format_histogram_report, format_sources_report
 from .helpers.urls import update_query_string
 from .helpers.validation import validate_attribute_name
-from .utilities import _fetch_valid_ranks
+from .utilities import fetch_valid_ranks
 
 logger = get_logger(__name__)
 
@@ -94,9 +94,10 @@ async def get_goat_report(
                 f"Error: When querying {report_type} reports for the "
                 f"taxon index, a 'rank' parameter must be provided."
             )
-        if rank not in await _fetch_valid_ranks():
+        valid_ranks = await fetch_valid_ranks()
+        if rank not in valid_ranks:
             return (f"Error: Invalid rank '{rank}' provided for GoaT taxa reports."
-                    f" Valid ranks are: {', '.join(await _fetch_valid_ranks())}.")
+                    f" Valid ranks are: {', '.join(valid_ranks)}.")
 
         url = update_query_string(url, "rank", rank)
 

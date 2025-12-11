@@ -54,4 +54,18 @@ Try a query:
 report based queries
 
 - get me a histogram of assembly_span values across all species
+
   - give me the version with estimated values as well
+
+- how many ungulates, spiders and lizards have directly measured genome sizes over 1G and less than 2.5G with a chromosome number over 10, excluding snakes
+
+  - can I have a table of the largest 5 genome sizes in that list
+  - can you include a list of projects targeting each species in the table
+  - can you include a list of projects targeting each species in the table
+  - can you filter the table to only include rows where bioproject is present
+  - I mean apply that filter to the full query
+
+- give me the first 10 rows of a table of crab species targeted by any project. Include common name and family in the table
+  - can you sort the table and give me the top 10 by largest genome size
+  - can you restrict that to non-ancestral values for genome size
+  - can you expand the search to all crustaceans

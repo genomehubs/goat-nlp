@@ -6,6 +6,10 @@ import json
 # import secrets
 from typing import Any
 
+from ...logging_config import get_logger
+
+logger = get_logger(__name__)
+
 SALT_FOR_HASHING = "FIXED_FOR_DEBUGGING"  # secrets.token_urlsafe(32)
 
 
@@ -389,3 +393,33 @@ def validate_dict(input_dict: Any) -> bool:
         return False
     expected_hash = hash_dict(input_dict)
     return hash_str == expected_hash
+
+
+async def set_search_index(
+    taxa: list[str] | None,
+    assemblies: list[str] | None,
+    samples: list[str] | None,
+    user_query: str
+) -> None:
+    """Set the search index for validation purposes.
+
+    Args:
+        taxa: List of taxon names or IDs
+        assemblies: List of assembly accessions
+        samples: List of sample accessions
+        user_query: The original user question
+    """
+    search_index = None
+
+    if assemblies:
+        search_index = "assembly"
+    elif samples:
+        search_index = "sample"
+    elif taxa:
+        search_index = "taxon"
+    else:
+        # Try to infer from query
+        from ..utilities import choose_search_index
+        search_index = await choose_search_index(user_query)
+        logger.info(f"Inferred search_index from query: {search_index}")
+    return search_index

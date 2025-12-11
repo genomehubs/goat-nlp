@@ -15,20 +15,27 @@ will be handled in a subsequent step.
 IMPORTANT: values passed to taxa MUST be valid SCIENTIFIC NAMES or IDs.
 You can check taxon names using check_taxon_exists() if needed.
 
+Partial identifiers are allowed for taxa, assemblies, and samples using a wildcard (*) at the beginning or end.
+
+A NOT filter can be applied to exclude specific taxa, assemblies, and samples by prefixing an exclamation mark (!).
+
 FOLLOW THESE STEPS EXACTLY:
 
 1. **Identify the ID TYPE and extract it**:
    - TAXA (species/families/genera): Translate organism names
      Examples: "mammal"→"Mammalia", "cat"→"Felis", "dog"→"Canis"
      Pass as: taxa="Mammalia" OR as a list, e.g. taxa=["Felis", "Canis"]
+     For NOT filters, prefix with !, e.g. taxa=["Mammalia", "!Felis"]
      If no taxa are mentioned, pass an empty list: taxa=[]
 
    - ASSEMBLIES (genome): Extract accession like "GCF_000002305.6"
      Pass as: assemblies="GCF_000002305.6" OR as a list, e.g. assemblies=["GCF_000002305.6", "GCA_000001405.28"]
+     For NOT filters, prefix with !, e.g. assemblies=["GCF_000002305.6", "!GCA_000001405.28"]
      If no assemblies are mentioned, pass an empty list: assemblies=[]
 
    - SAMPLES (DNA/RNA): Extract accession like "SRR1234567"
      Pass as: samples="SRR1234567" OR as a list, e.g. samples=["SRR1234567", "SRR7654321"]
+     For NOT filters, prefix with !, e.g. samples=["SRR1234567", "!SRR7654321"]
      If no samples are mentioned, pass an empty list: samples=[]
 
 2. **rank** (if applicable): The taxonomic rank
@@ -37,70 +44,29 @@ FOLLOW THESE STEPS EXACTLY:
 
 3. **taxon_filter_type**: Type of taxon filter to apply if taxa provided
    Options:
-   - "children" (default): e.g. "families in Felis"
+   - "children" (default): e.g. "families in Mammalia", "species under Felis"
    - "matching": e.g. "matching Canis*", "for Nymphalidae"
    - "lineage": e.g. "lineage of Mammalia", "parent taxa of Felis"
 
-4. **intent**: What kind of result
-   - "count": "How many..." (count species; default)
-   - "table": "Which...", "List..." (show results)
-
-5. **user_query**: Copy the original question EXACTLY. DO NOT MODIFY IT.
-
-TAXON NAME TRANSLATIONS:
-mammal→Mammalia, cat→Felis, dog→Canis, bat→Chiroptera,
-bird→Aves, primate→Primates, fish→Actinopterygii,
-insect→Insecta, plant→Plantae
+4. **user_query**: Copy the original question EXACTLY. DO NOT MODIFY IT.
 
 EXAMPLE:
-Query: "How many mammal species have minimum directly measured genome size < 3G?"
+Query: "How many mammal species, excluding Felis have minimum directly measured genome size < 3G?"
 
-Step 1: ID TYPE → "mammal" = taxa → ["Mammalia"]
+Step 1: ID TYPE → "mammal", "Felis" = taxa → ["Mammalia", "!Felis"]
 Step 2: Rank → "species"
 Step 3: taxon_filter_type → "children"
-Step 4: Intent → "How many" = "count"
-Step 5: user_query → Copy exactly
+Step 4: user_query → Copy exactly
 THEN CALL:
 process_identifiers(
-  user_query="How many mammal species have minimum directly measured genome size < 3G?",
-  taxa=["Mammalia"],
+  user_query="How many mammal species, excluding Felis have minimum directly measured genome size < 3G?",
+  taxa=["Mammalia", "!Felis"],
   rank="species",
-  intent="count",
   taxon_filter_type="children"
 )
 
-DO NOT CALL unless you've completed all 5 steps above!
+DO NOT CALL unless you've completed all 4 steps above!
 """
-
-
-async def set_search_index(
-    taxa: list[str] | None,
-    assemblies: list[str] | None,
-    samples: list[str] | None,
-    user_query: str
-) -> None:
-    """Set the search index for validation purposes.
-
-    Args:
-        taxa: List of taxon names or IDs
-        assemblies: List of assembly accessions
-        samples: List of sample accessions
-        user_query: The original user question
-    """
-    search_index = None
-
-    if assemblies:
-        search_index = "assembly"
-    elif samples:
-        search_index = "sample"
-    elif taxa:
-        search_index = "taxon"
-    else:
-        # Try to infer from query
-        from .utilities import choose_search_index
-        search_index = await choose_search_index(user_query)
-        logger.info(f"Inferred search_index from query: {search_index}")
-    return search_index
 
 
 async def process_identifiers(
@@ -131,6 +97,7 @@ async def process_identifiers(
         taxa = []
     elif isinstance(taxa, str):
         taxa = [taxa]
+    taxa = [t.strip().replace("!", "%21") for t in taxa if t.strip() != ""]
     if assemblies is None:
         assemblies = []
     elif isinstance(assemblies, str):
@@ -139,17 +106,13 @@ async def process_identifiers(
         samples = []
     elif isinstance(samples, str):
         samples = [samples]
-    search_index = await set_search_index(taxa, assemblies, samples, user_query)
-    if not search_index:
-        raise ValueError("Could not determine search_index in process_identifiers().")
+
     result: dict[str, Any] = {
         "taxa": taxa,
         "assemblies": assemblies,
         "samples": samples,
         "rank": rank if rank is not None else "",
-        "intent": intent,
         "taxon_filter_type": taxon_filter_type,
-        "search_index": search_index,
         "user_query": user_query,
     }
 

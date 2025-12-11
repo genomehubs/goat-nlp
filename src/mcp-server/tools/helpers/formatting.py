@@ -101,6 +101,8 @@ def format_record(record: dict, url: str, attributes: list[str] | None = None, t
 def format_result_table(
     results: list[dict],
     search_fields: list[str],
+    search_names: list[str],
+    search_ranks: list[str],
     search_url: str,
 ) -> str:
     """Format search results as a markdown table with context.
@@ -108,6 +110,8 @@ def format_result_table(
     Args:
         results: List of result records
         search_fields: List of fields to include in the table
+        search_names: List of taxon name classes to include
+        search_ranks: List of taxonomic ranks to include
         search_url: GoaT web interface URL
 
     Returns:
@@ -133,16 +137,30 @@ def format_result_table(
                 columns.append("taxon_rank")
             if "fields" in record:
                 columns.extend(record["fields"].keys())
-            # if search_fields:
-            #     # Ensure requested fields are included
-            #     for field in search_fields:
-            #         if field not in columns:
-            #             columns.append(field)
+            if search_fields:
+                # Ensure requested fields are included
+                for field in search_fields:
+                    field_name = field.get("name")
+                    if field_name is None:
+                        continue
+                    if field_name not in columns:
+                        columns.append(field_name)
+                    if modifiers := field.get("modifier", []):
+                        for mod in modifiers:
+                            full_field = f"{field_name}:{mod}"
+                            if full_field not in columns:
+                                columns.append(full_field)
+            if search_names:
+                columns.extend(iter(search_names))
+            if search_ranks:
+                columns.extend(iter(search_ranks))
             # Build header
             header = "| " + " | ".join(columns) + " |"
             separator = "| " + " | ".join(["---"] * len(columns)) + " |"
 
         fields = record.get("fields", {})
+        names = record.get("names", {})
+        ranks = record.get("ranks", {})
         for col in columns:
             flag = False
             # Handle different field types
@@ -162,6 +180,10 @@ def format_result_table(
                     )
                 else:
                     value = str(attr_value)
+            elif col in search_names:
+                value = ", ".join(names.get(col, {}).get("name", ["N/A"]))
+            elif col in search_ranks:
+                value = ranks.get(col, {}).get("scientific_name", "N/A")
             else:
                 value = "N/A"
 
