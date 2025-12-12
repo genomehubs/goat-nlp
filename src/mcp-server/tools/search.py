@@ -1,6 +1,6 @@
 from ..logging_config import get_logger
 from .helpers.api import make_goat_request
-from .helpers.constants import FIELD_CACHE, GOAT_API_BASE, GOAT_DESCRIPTION
+from .helpers.constants import FIELD_CACHE, GOAT_API_BASE
 from .helpers.fetch import fetch_valid_types
 from .helpers.formatting import format_result_table, rank_description
 from .helpers.query import build_query_string, process_modifiers, set_exclusions
@@ -248,6 +248,28 @@ using the get_attribute_selection_context or get_valid_types tools.
         attributes = process_modifiers(attributes)
         logger.info(f"Processed modifiers in {len(attributes)} attributes")
 
+    filtered_names = []
+    taxa_length_before = len(taxa or [])
+    for name in names or []:
+        parts = name.split(":")
+        if len(parts) == 2 and parts[0].replace("_", " ") in [
+            "scientific name", "common name", "synonym", "tolid prefix", "authority"
+        ]:
+            taxa.append(f"{parts[0].replace('_', ' ')}:{parts[1]}")
+        else:
+            filtered_names.append(name)
+    if len(filtered_names) != len(names or []):
+        if taxa_length_before == 0:
+            taxon_filter_type = "matching"
+        elif taxon_filter_type != "matching":
+            return """Error: prefixed names in 'names' (e.g., 'common name:dog') cannot be used
+            alongside regular taxon names in 'taxa' unless taxon_filter_type is set to 'matching'.
+
+            Please check with the user and retry the call with taxon_filter_type='matching' ONLY if
+            it is valid to do so."""
+
+    names = filtered_names
+
     query_string = build_query_string(taxa, rank, attributes, assemblies, samples, taxon_filter_type)
     exclusions = set_exclusions(attributes)
     logger.info(f"Built query_string: {query_string}")
@@ -304,7 +326,7 @@ using the get_attribute_selection_context or get_valid_types tools.
         count = data.get("count", 0)
         search_url = url.replace("/api/v2", "").replace("count?", "search?")
 
-    if taxa and rank:
+    if taxa and rank and search_index == "taxon":
         description = f"{count} {rank_description(rank)} within {','.join(taxa)}"
     elif taxa:
         description = f"{count} records within {','.join(taxa)}"
@@ -330,7 +352,7 @@ using the get_attribute_selection_context or get_valid_types tools.
         )
 
     result = f"""
-According to {GOAT_DESCRIPTION}, there are {description}.
+According to GoaT, there are {description}.
 
 This count is based on data from the NCBI taxonomy,
 supplemented by additional metadata from the GoaT database.

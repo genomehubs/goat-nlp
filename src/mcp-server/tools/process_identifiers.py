@@ -78,8 +78,8 @@ async def process_identifiers(
     assemblies: list[str] | None = None,
     samples: list[str] | None = None,
     rank: str | None = None,
-    intent: str = "count",
     taxon_filter_type: str = "children",
+    search_index: str = "taxon",
 ) -> dict[str, Any]:
     """Process and validate identifier-related query parameters.
 
@@ -89,9 +89,9 @@ async def process_identifiers(
         assemblies: List of assembly accessions
         samples: List of sample accessions
         rank: Taxonomic rank if applicable
-        intent: Result type - "count" (default), "table", "histogram", or "record"
         taxon_filter_type: Type of taxon filter to apply if taxa provided
                            Options: "children" (default), "matching", "lineage"
+        search_index: The search index to use ("taxon", "assembly", or "sample")
 
     Returns:
         A dictionary with processed identifiers for GoaT API queries.

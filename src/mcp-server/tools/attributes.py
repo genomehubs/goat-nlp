@@ -220,7 +220,7 @@ async def _get_attribute_context_internal(
         "authority": "authority"}
     if keyword_lower.replace("_", " ") in valid_names:
         attr_info = [
-            f"Name: {valid_names[keyword_lower.replace('_', ' ')]}"
+            f"Name: {valid_names[keyword_lower.replace('_', ' ')]}\n"
             "Name Type: name"
         ]
         name_attributes.append("\n".join(attr_info))
@@ -327,6 +327,10 @@ async def get_attribute_selection_context(
     IMPORTANT: If you do not get results with a keyword search, try different
     keywords or use a descriptive phrase to expand your search.
 
+
+    IMPORTANT: If the user wants to know about chromosome count, it is better to also
+    return chromosome number as this is more likely to be the required field.
+
     Args:
         keyword: Keyword or phrase  to guide attribute selection
         comparison: Comparison context to guide attribute selection
@@ -335,63 +339,7 @@ async def get_attribute_selection_context(
     logger.info(f"get_attribute_selection_context called: keyword='{keyword}', "
                 f"comparison='{comparison}', search_index={search_index}")
 
-    # Check for keywords that need disambiguation guidance
-    # keyword_lower = keyword.lower()
-    # disambiguation_guidance = None
-
-    # # Detect project-related queries that might confuse target_list vs sequencing_status
-    # project_keywords = ["dtol", "canbp", "vgp", "ebp", "project", "target", "list", "long_list"]
-    # status_keywords = ["sequencing", "status", "progress", "completed", "data", "available"]
-
-    # has_project_keyword = any(kw in keyword_lower for kw in project_keywords)
-    # has_status_keyword = any(kw in keyword_lower for kw in status_keywords)
-
-#     if has_project_keyword or has_status_keyword:
-#         disambiguation_guidance = """
-# ⚠️  DISAMBIGUATION GUIDANCE - Read this first!
-
-# If asking which species are ON a target list:
-#   → Use: long_list attribute
-#   → Values: dtol, canbp, vgp, ebp, etc.
-#   → Example: "How many species are on the DToL target list?" → long_list=dtol
-
-# If asking about sequencing STATUS/PROGRESS:
-#   → Use: sequencing_status_dtol, sequencing_status_canbp, etc.
-#   → Values: completed, in_progress, planned, etc.
-#   → Example: "How many species have completed sequencing for DToL?" → sequencing_status_dtol=completed
-
-# Common confusion:
-#   ✗ WRONG: "species on dtol list" → sequencing_status_dtol
-#   ✓ RIGHT: "species on dtol list" → long_list=dtol
-
-#   ✗ WRONG: "species with completed dtol sequencing" → long_list=dtol
-#   ✓ RIGHT: "species with completed dtol sequencing" → sequencing_status_dtol=completed
-# """
-
-#     # Detect protected/conservation status queries
-#     if "protected" in keyword_lower or "conservation" in keyword_lower:
-#         disambiguation_guidance = """
-# ⚠️  DISAMBIGUATION GUIDANCE - Read this first!
-
-# For legal protection status:
-#   → Use: protected_status attribute
-#   → Example: "Which species have protected status?"
-
-# For threat/conservation level:
-#   → Use: conservation_status attribute
-#   → Example: "Which species are endangered?"
-# """
-
-    result = await _get_attribute_context_internal(keyword, search_index)
-
-    # Add disambiguation guidance at the top of the result if present
-    # if disambiguation_guidance:
-    #     result = {
-    #         "IMPORTANT_READ_FIRST": disambiguation_guidance,
-    #         **result
-    #     }
-
-    return result
+    return await _get_attribute_context_internal(keyword, search_index)
 
 
 def register_tools(mcp) -> None:

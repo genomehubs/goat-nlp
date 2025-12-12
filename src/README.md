@@ -35,27 +35,29 @@ Try a query:
 - which species with chromosomal or better assemblies have over 10Mb contiguity? - not gemini
   - what about for scaffold n50?
 - how many bat families are targeted by the vgp? - not gemini
-- which attributes support ordered keyword searches? - not gemini - not without fetch\_)types
+- which attributes support ordered keyword searches? - not gemini
 - how many cat species are missing genome size data?
 - which species are on the DTOL target list?
-- how many species have a tolid prefix beginning ilLys? - names only recognised in process attributes
+- how many species have a tolid prefix beginning ilLys?
 - how many have tolid prefixes ending cori?
 - what are the bioprojects for bats?
-  - can you get me a list of all the bioprojects?
-- what is the lineage for the banded snail? - not without report - using ranks
+  - how many bat species have bioprojects beginning prjeb4?
+- what is the lineage for the banded snail?
 - how many assemblies are there for species in the cat and dog families? - not gpt4.1
 - show me a table of contig and scaffold n50 for all cat assemblies, sorted by contig n50
-- can you give me a table of genome size and chromosome count for the nematode groups shown in [this tree](https://media.springernature.com/lw1200/springer-static/image/art%3A10.1186%2Fs12862-019-1444-x/MediaObjects/12862_2019_1444_Fig4_HTML.png)
+- can you give me a table of genome size and chromosome count for the nematode groups shown in [this tree](link died)
 - give me a table of current sequencing status for species on both the CANBP and DTOL lists
-- what is the protected status of meles meles
-- which species of insect have protected status
+- what is the protected status of meles meles - not quite
+- which species of insect have protected status - not quite
   - can you give me a table of the conservation statuses
 
-report based queries
+report based queries - not currently available
 
 - get me a histogram of assembly_span values across all species
 
   - give me the version with estimated values as well
+
+other test queries
 
 - how many ungulates, spiders and lizards have directly measured genome sizes over 1G and less than 2.5G with a chromosome number over 10, excluding snakes
 
@@ -82,8 +84,20 @@ report based queries
   - can you also add columns for common name family and haploid chromosome number
 
 - are there any crab genomes?
+
   - which of these are scaffold or worse
   - what is the status for these species in ongoing projects
   - how many projects can you show me the status in?
   - can you check across all these projects and just show me the ones with those crab species listed
     - give me the full status
+
+- can you include a list of projects targeting each species in the table
+
+  - can you use genome_size_kmer field instead of genome_size
+  - can you filter out missing values in the projects columns using goat rather than after the table is returned
+  - can you reverse the sort order
+  - what about sorting by most chromosomes instead
+  - what is the status of these species?
+  - do any have busco scores
+
+- have any squirrels been sequenced under a bioproject starting prjeb4

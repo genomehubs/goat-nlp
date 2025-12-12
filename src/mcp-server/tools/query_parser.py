@@ -7,7 +7,7 @@ from .artifact_store import retrieve
 from .helpers.constants import FIELD_CACHE
 from .helpers.fetch import fetch_valid_types
 from .helpers.query import set_search_tips
-from .helpers.validation import set_search_index, validate_attribute_name
+from .helpers.validation import validate_attribute_name
 
 logger = get_logger(__name__)
 
@@ -101,6 +101,7 @@ async def goat_query(
     identifiers_artifact_id: str,
     attributes_artifact_id: str,
     intent: str,
+    search_index: str = "taxon",
     sort_by: str | None = None,
     sort_order: str | None = None,
     size: int | None = None,
@@ -112,6 +113,7 @@ async def goat_query(
         identifiers_artifact_id: Artifact id from process_identifiers() containing identifier-related parameters.
         attributes_artifact_id: Artifact id from process_attributes() containing attribute-related parameters.
         intent: Result type - "count" (default), "table", "histogram", or "record"
+        search_index: The search index to use ("taxon", "assembly", or "sample")
         sort_by: Optional field to sort results by (e.g., "genome_size")
         sort_order: Optional sort order - "asc" or "desc"
         size: Optional result size limit (default 10 for tables, None for counts)
@@ -162,10 +164,6 @@ async def goat_query(
     taxon_filter_type = identifiers_output.get("taxon_filter_type", "children")
     rank = identifiers_output.get("rank")
     user_query = identifiers_output.get("user_query", "")
-
-    search_index = await set_search_index(
-        taxa, assemblies, samples, user_query
-    )
 
     show_table = intent == "table"
 

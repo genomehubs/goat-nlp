@@ -6,7 +6,7 @@ from ..logging_config import get_logger
 from .artifact_store import store
 from .helpers.constants import FIELD_CACHE
 from .helpers.fetch import fetch_valid_types
-from .helpers.validation import hash_dict, set_search_index, validate_attributes
+from .helpers.validation import hash_dict, validate_attributes
 from .utilities import fetch_valid_ranks
 
 logger = get_logger(__name__)
@@ -36,7 +36,8 @@ DISAMBIGUATION:
 
 FOLLOW THESE STEPS EXACTLY:
 
-1. **attributes**: List of attribute filter dicts with 'name' and optional 'operator', 'value', and 'modifier'.
+1. **attributes**: List of attribute filter dicts with 'name' and optional 'operator', 'value', 'modifier'
+   and 'type'. DO NOT include names or ranks here.
    Examples:
    - "genome_size < 3G" → [{"name": "genome_size", "operator": "<", "value": "3000000000"}]
    - With modifiers: "minimum directly measured genome_size"
@@ -85,10 +86,15 @@ FOLLOW THESE STEPS EXACTLY:
      ["min"]}, {"name": "assembly_level", "modifier": ["direct"]}]
 
 3. **names**: Taxon name classes to include in the response.
+   Can contain values from: scientific_name, common_name, synonym, tolid_prefix, authority.
    Examples:
    - "show scientific names ..." → ["scientific_name"]
    - "return common name and synonym for ..." → ["common_name", "synonym"]
    - "list the tolid prefix and authority for ..." → ["tolid_prefix", "other_name"]
+   - "common name contains 'bat'" → ["common_name:*bat*"]
+   - "synonym is 'Canis'" → ["synonym:Canis"]
+   - "authority ends with 'Linnaeus'" → ["authority:*Linnaeus"]
+   - "tolip_prefix starts with ilLys" → ["tolid_prefix:ilLys*"]
 
 4. **ranks**: Taxonomic ranks to include in the response.
    These are ranks that the user request to be returned as fields.
@@ -129,6 +135,7 @@ async def process_attributes(
     user_query: str,
     names: list[str] | None = None,
     ranks: list[str] | None = None,
+    search_index: str = "taxon",
 ) -> dict[str, Any]:
     """Process and validate attribute-related query parameters.
 
@@ -138,6 +145,7 @@ async def process_attributes(
         user_query: The original user question
         names: Optional list of taxon name classes to include in the response.
         ranks: Optional list of taxonomic ranks to include in the response.
+        search_index: The search index to use ("taxon", "assembly", or "sample")
 
     Returns:
         A dictionary with processed attributes for GoaT API queries.
@@ -146,7 +154,8 @@ async def process_attributes(
     valid_names = {"scientific_name", "common_name", "synonym", "tolid_prefix", "authority"}
     if names:
         for name in names:
-            if name not in valid_names:
+            prefix = name.split(":", 1)[0] if ":" in name else name
+            if prefix not in valid_names:
                 raise ValueError(
                     f"""Invalid name '{name}' provided to process_attributes().
 Valid names are: {', '.join(valid_names)}."""
@@ -169,8 +178,6 @@ Valid ranks are: {', '.join(valid_ranks)}."""
         if name and name not in names and name not in ranks:
             filtered_fields.append(f)
     fields = filtered_fields
-
-    search_index = await set_search_index([], [], [], user_query) or "taxon"
 
     # Populate FIELD_CACHE before validation
     await fetch_valid_types(search_index)

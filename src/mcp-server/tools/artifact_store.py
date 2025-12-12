@@ -2,7 +2,7 @@
 
 This store keeps authoritative structured objects server-side and returns opaque
 artifact tokens to tools. Tokens are HMAC-signed to prevent forgery. Entries
-expire after a TTL (default 60 seconds).
+expire after a TTL (default 300 seconds).
 
 Usage:
     from .artifact_store import store, retrieve
@@ -25,7 +25,7 @@ if _SECRET is None:
 _SECRET_BYTES = _SECRET.encode("utf-8")
 
 # Default TTL (seconds)
-DEFAULT_TTL = int(os.environ.get("GOAT_ARTIFACT_TTL_SECONDS", "60"))
+DEFAULT_TTL = int(os.environ.get("GOAT_ARTIFACT_TTL_SECONDS", "300"))
 
 # In-memory store: uid -> {data, created, ttl}
 _STORE: dict[str, dict[str, Any]] = {}

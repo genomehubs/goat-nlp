@@ -110,10 +110,15 @@ def format_attributes(attributes: list[dict]) -> str:
             continue
 
         # Convert size formats (e.g., "3G" -> 3000000000) to bytes
-        value_converted = convert_size_to_bytes(value)
-        value_str = str(value_converted)
+        if isinstance(value, str):
+            value_converted = convert_size_to_bytes(value)
+            value_str = str(value_converted)
+        elif isinstance(value, list):
+            value_str = "%2C".join(str(v) for v in value)
+        else:
+            value_str = str(value)
 
-        formatted_attrs.append(f"{name}{quote(operator)}{value_str}")
+        formatted_attrs.append(f"{name}{quote(operator)}{value_str.replace(' ', '%20').replace("*", '%2A')}")
 
     if formatted_attrs:
         return "%20AND%20" + "%20AND%20".join(formatted_attrs)

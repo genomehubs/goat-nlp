@@ -1,3 +1,4 @@
+import re
 import time
 
 from .helpers.api import make_goat_request
@@ -126,6 +127,7 @@ async def choose_search_index(query: str) -> str:
     - ✓ "How many mammal species have assemblies" → taxon (counting species)
     - ✗ "How many mammal species have assemblies" → assembly (wrong!)
     - ✓ "How many assemblies exist for mammals" → assembly (counting assemblies)
+    - ✓ "How many cat assemblies are there" → assembly (counting assemblies)
     - ✓ "Which dog family species are on DToL" → taxon (counting species)
     - ✓ "List assemblies with N50 > 1Mb" → assembly (listing assemblies)
 
@@ -138,6 +140,7 @@ async def choose_search_index(query: str) -> str:
 
     # Look for what is being counted/listed
     # Assembly index: explicitly counting assemblies
+    # Patterns for assembly index, including those with words between "how many"/"count"/etc. and "assemblies"
     assembly_patterns = [
         "how many assemblies",
         "count assemblies",
@@ -147,6 +150,19 @@ async def choose_search_index(query: str) -> str:
         "assemblies for",
         "assemblies with",
     ]
+
+    # Regex patterns to catch phrases like "how many ___ assemblies", "count the ___ assemblies", etc.
+    assembly_regexes = [
+        r"how many\s+\w+(?:\s+\w+){0,5}?\s+assemblies",  # up to 5 words between
+        r"count(?: the)?\s+\w+(?:\s+\w+){0,5}?\s+assemblies",
+        r"list(?: the)?\s+\w+(?:\s+\w+){0,5}?\s+assemblies",
+        r"which\s+\w+(?:\s+\w+){0,5}?\s+assemblies",
+        r"show(?: me)?(?: the)?\s+\w+(?:\s+\w+){0,5}?\s+assemblies",
+    ]
+    if any(pattern in query_lower for pattern in assembly_patterns):
+        return "assembly"
+    if any(re.search(regex, query_lower) for regex in assembly_regexes):
+        return "assembly"
     if any(pattern in query_lower for pattern in assembly_patterns):
         return "assembly"
 
@@ -162,9 +178,19 @@ async def choose_search_index(query: str) -> str:
     ]
     if any(pattern in query_lower for pattern in sample_patterns):
         return "sample"
-
-    # Default to taxon for everything else (species, genera, families, etc.)
-    return "taxon"
+    # Regex patterns to catch phrases like "how many ___ samples", "count the ___ samples", etc.
+    sample_regexes = [
+        r"how many\s+\w+(?:\s+\w+){0,5}?\s+samples",  # up to 5 words between
+        r"count(?: the)?\s+\w+(?:\s+\w+){0,5}?\s+samples",
+        r"list(?: the)?\s+\w+(?:\s+\w+){0,5}?\s+samples",
+        r"which\s+\w+(?:\s+\w+){0,5}?\s+samples",
+        r"show(?: me)?(?: the)?\s+\w+(?:\s+\w+){0,5}?\s+samples",
+    ]
+    return (
+        "sample"
+        if any(re.search(regex, query_lower) for regex in sample_regexes)
+        else "taxon"
+    )
 
 
 async def check_taxon_exists(name: str) -> dict:

@@ -87,24 +87,31 @@ def get_multi_stage_prompt() -> str:
     """System prompt for the multi-stage approach."""
     return """Use tools in correct sequence to answer genomic data questions about GoaT.
 
-CRITICAL: ALWAYS run tools in the correct order. Steps 1 and 2 can be run in parallel as they
+CRITICAL: ALWAYS run tools in the correct order. Steps 2 and 3 can be run in parallel as they
 prepare parameters for step 3.
+
 IMPORTANT WORKFLOW:
-1. Run process_identifiers() to prepare taxa, assemblies, and/or samples.
+1. Select the search index using choose_search_index() based on what is being counted/listed.
+   - CRITICAL: Choose the index based on what the user wants to COUNT or LIST,
+               not what attributes they want to filter by.
+   - IMPORTANT: Use "taxon" index for counting/listing taxonomic units (species, families, genera, orders).
+   - IMPORTANT: Use "assembly" index ONLY when counting/listing assemblies themselves.
+   - IMPORTANT: Use "sample" index ONLY when counting/listing samples themselves.
+2. Run process_identifiers() to prepare taxa, assemblies, and/or samples.
    - IMPORTANT: Run ONLY ONCE for all taxon, assembly and sample identifiers.
    - IMPORTANT: You must provide taxa as valid scientific names or IDs.
                 Use check_taxon_exists() if needed to validate names.
 
-2. Run process_attributes() to prepare attribute filters and fields.
+3. Run process_attributes() to prepare attribute filters and fields.
    - IMPORTANT: Run ONLY ONCE for all attribute filters and fields.
 
-3. Run goat_query() with prepared parameters from steps 1 and 2.
+4. Run goat_query() with prepared parameters from steps 2 and 3.
     - CRITICAL: You MUST provide processed identifiers and attributes artifact IDs EXACTLY
-                as returned from steps 1 and 2.
+                as returned from steps 2 and 3.
                 goat_query will fail if you modify these parameters in any way.
     - IMPORTANT: Run ONLY ONCE to get final results.
 
-4. If a table report, or visualization is needed, use get_goat_report() with the search_url from goat_query().
+5. If a table report, or visualization is needed, use get_goat_report() with the search_url from goat_query().
     - CRITICAL: NEVER try to call get_goat_report without first getting a search_url from goat_query().
     - CRITICAL: NEVER try to construct a search_url manually - you must get it from a search result.
 """
