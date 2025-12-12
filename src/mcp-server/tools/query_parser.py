@@ -3,10 +3,11 @@
 from typing import Any
 
 from ..logging_config import get_logger
+from .artifact_store import retrieve
 from .helpers.constants import FIELD_CACHE
 from .helpers.fetch import fetch_valid_types
 from .helpers.query import set_search_tips
-from .helpers.validation import set_search_index, validate_attribute_name, validate_dict
+from .helpers.validation import set_search_index, validate_attribute_name
 
 logger = get_logger(__name__)
 
@@ -15,7 +16,7 @@ PROCESS_ATTRIBUTES_PROMPT = """Parse query parameters to form a GoaT URL and ret
 
 CRITICAL: ONLY RUN THIS TOOL AFTER PROCESSING IDENTIFIERS WITH process_identifiers()
           AND ATTRIBUTES WITH process_attributes()!
-          YOU MUST PASS THE UNCHANGED IDENTIFIERS AND ATTRIBUTES OUTPUTS TO THIS TOOL AS INPUT!
+          YOU MUST PASS THE UNCHANGED IDENTIFIERS AND ATTRIBUTES ARTEFACT KEYS AS INPUT!
 
 GOTCHAS: The most common reason this tool fails is because the input data structures
           have been modified or incorrectly constructed. ENSURE YOU PASS THE EXACT
@@ -23,9 +24,9 @@ GOTCHAS: The most common reason this tool fails is because the input data struct
 
 FOLLOW THESE STEPS EXACTLY:
 
-1. **identifiers_output**: Pass in the process_identifiers() output data structure EXACTLY. DO NOT MODIFY IT.
+1. **identifiers_output**: Pass in the process_identifiers() artifact key EXACTLY. DO NOT MODIFY IT.
 
-2. **attributes_output**: Pass in the process_attributes() output data structure EXACTLY. DO NOT MODIFY IT.
+2. **attributes_output**: Pass in the process_attributes() artifact key EXACTLY. DO NOT MODIFY IT.
 
 3. **intent**: What kind of result
    - "count": "How many..." (count species)
@@ -44,27 +45,15 @@ If intent is table, ALSO PROCESS:
 EXAMPLE:
 Query: "How many mammal species have minimum directly measured genome size < 3G?"
 Step 1: process_identifiers() output → IDENTIFIERS_OUTPUT = {
-    "taxa": ["Mammalia"],
-    "assemblies": [],
-    "samples": [],
-    "rank": "species",
-    "intent": "count",
-    "taxon_filter_type": "children",
-    "user_query": "How many mammal species have minimum directly measured genome size < 3G?"
+    artifact_id: aebc12345...,
 }
 Step 2: process_attributes() output → ATTRIBUTES_OUTPUT = {
-    "attributes": [{"name": "genome_size", "operator": "<", "value": "3000000000", "modifier": ["min", "direct"]}],
-    "fields": [],
-    "intent": "count",
-    "taxa": ["Mammalia"],
-    "rank": "species",
-    "taxon_filter_type": "children",
-    "user_query": "How many mammal species have minimum directly measured genome size < 3G?"
+    artifact_id: fghd67890...,
 }
 THEN CALL:
 goat_query(
-    identifiers_output=IDENTIFIERS_OUTPUT,
-    attributes_output=ATTRIBUTES_OUTPUT,
+    identifiers_artifact_id=IDENTIFIERS_ARTIFACT_ID,
+    attributes_artifact_id=ATTRIBUTES_ARTIFACT_ID,
     intent="count",
     sort_by=None,
     sort_order=None,
@@ -109,8 +98,8 @@ DO NOT CALL unless you've completed all 8 steps above!
 
 
 async def goat_query(
-    identifiers_output: dict[str, Any],
-    attributes_output: dict[str, Any],
+    identifiers_artifact_id: str,
+    attributes_artifact_id: str,
     intent: str,
     sort_by: str | None = None,
     sort_order: str | None = None,
@@ -120,8 +109,8 @@ async def goat_query(
     """Parse processed attributes and identifiers into a GoaT URL and optionally return a count and table.
 
     Args:
-        identifiers_output: Output from process_identifiers() containing identifier-related parameters.
-        attributes_output: Output from process_attributes() containing attribute-related parameters.
+        identifiers_artifact_id: Artifact id from process_identifiers() containing identifier-related parameters.
+        attributes_artifact_id: Artifact id from process_attributes() containing attribute-related parameters.
         intent: Result type - "count" (default), "table", "histogram", or "record"
         sort_by: Optional field to sort results by (e.g., "genome_size")
         sort_order: Optional sort order - "asc" or "desc"
@@ -132,12 +121,35 @@ async def goat_query(
         dict with URL, count and result table (if requested)
     """
 
-    if not validate_dict(attributes_output) or not validate_dict(identifiers_output):
+    # If artifact tokens were provided (string), attempt to retrieve stored objects
+    if isinstance(identifiers_artifact_id, str):
+        identifiers_output = retrieve(identifiers_artifact_id)
+    if isinstance(attributes_artifact_id, str):
+        attributes_output = retrieve(attributes_artifact_id)
+
+    if not isinstance(identifiers_output, dict):
         raise ValueError(
-            "Invalid identifiers_output or attributes_output provided to goat_query().\n"
-            "Ensure you pass the EXACT output from process_identifiers() and process_attributes()\n"
-            "WITHOUT modification."
+            "Invalid identifiers_artifact_id provided to goat_query().\n"
+            "Ensure you pass the EXACT key from process_identifiers()\n"
+            "WITHOUT modification.\n\n"
+            "Note that the identifiers artifact is only valid for a limited time after creation.\n"
+            "If it has expired, you will need to re-run process_identifiers() to get a new artifact key."
         )
+    if not isinstance(attributes_output, dict):
+        raise ValueError(
+            "Invalid attributes_artifact_id provided to goat_query().\n"
+            "Ensure you pass the EXACT key from process_attributes()\n"
+            "WITHOUT modification.\n\n"
+            "Note that the attributes artifact is only valid for a limited time after creation.\n"
+            "If it has expired, you will need to re-run process_attributes() to get a new artifact key."
+        )
+
+    # if not validate_dict(attributes_output) or not validate_dict(identifiers_output):
+    #     raise ValueError(
+    #         "Invalid identifiers_artifact_id or attributes_artifact_id provided to goat_query().\n"
+    #         "Ensure you pass the EXACT key from process_identifiers() and process_attributes()\n"
+    #         "WITHOUT modification."
+    #     )
     if intent not in {"count", "table", "histogram", "record"}:
         raise ValueError(
             f"""Invalid intent '{intent}' provided to goat_query().\n"""
@@ -199,13 +211,13 @@ async def goat_query(
     )
 
     search_tips = set_search_tips(
-        attributes_output.get("attributes"),
-        attributes_output.get("fields"),
-        attributes_output.get("intent"),
+        attributes,
+        fields,
+        intent,
     )
 
     return {
-        "user_query": attributes_output.get("user_query", ""),
+        "user_query": user_query,
         "result": result,
         "search_tips": search_tips,
     }

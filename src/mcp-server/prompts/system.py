@@ -99,7 +99,8 @@ IMPORTANT WORKFLOW:
    - IMPORTANT: Run ONLY ONCE for all attribute filters and fields.
 
 3. Run goat_query() with prepared parameters from steps 1 and 2.
-    - CRITICAL: You MUST provide processed identifiers and attributes EXACTLY as returned from steps 1 and 2.
+    - CRITICAL: You MUST provide processed identifiers and attributes artifact IDs EXACTLY
+                as returned from steps 1 and 2.
                 goat_query will fail if you modify these parameters in any way.
     - IMPORTANT: Run ONLY ONCE to get final results.
 

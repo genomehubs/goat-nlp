@@ -127,11 +127,6 @@ def validate_operator(operator: str, meta: dict) -> str:
         "<": "<",
         ">=": ">=",
         "<=": "<=",
-        "exists": "exists",
-        "status": "exists",
-    }
-    valid_kw_operators = {
-        "=": "=",
         "==": "=",
         "eq": "=",
         "equals": "=",
@@ -153,9 +148,21 @@ def validate_operator(operator: str, meta: dict) -> str:
         "doesn't contain": "!=",
         "exists": "exists",
         "status": "exists",
+        "missing": "missing",
+        "not exists": "missing",
+        "!exists": "missing",
     }
-    if meta.get("processed_type") == "keyword":
-        valid_operators = valid_kw_operators
+    if meta.get("processed_type") != "keyword":
+        valid_operators |= {
+            ">": ">",
+            "<": "<",
+            ">=": ">=",
+            "<=": "<=",
+            "greater than": ">",
+            "less than": "<",
+            "greater than or equal to": ">=",
+            "less than or equal to": "<=",
+        }
     if operator.lower() not in valid_operators:
         raise ValueError(f"Invalid operator '{operator}'. Must be one of {list(valid_operators.keys())}.")
     return valid_operators[operator.lower()]
@@ -165,11 +172,14 @@ def validate_attribute_value(value: Any, meta: dict) -> str:
     """Validate and format an attribute value for GoaT query."""
     if meta.get("processed_type", "").endswith("keyword") and meta.get("constraint", {}).get("enum"):
         valid_values = [v.lower() for v in meta["constraint"]["enum"]]
-        values = [v.strip().lower() for v in str(value).split(",")]
+        if isinstance(value, str):
+            values = [v.strip().lower() for v in value.split(",")]
+        elif isinstance(value, list):
+            values = [str(v).strip().lower() for v in value]
         for v in values:
             if v.lstrip("!") not in valid_values:
                 raise ValueError(f"Invalid value '{v}' for attribute. Must be one of {valid_values}.")
-        return ",".join(values)
+        return "%2C".join(values)
     return value
 
 
@@ -221,9 +231,13 @@ def validate_attribute(attr: dict, search_index: str, field_cache: dict) -> dict
             modifier = value
             operator = None
             value = None
-        if operator.lower() == "exists":
+        elif operator.lower() == "exists":
             operator = None
             value = None
+        elif operator.lower() == "missing":
+            operator = None
+            value = None
+            modifier = "missing"
         else:
             operator = validate_operator(operator, meta)
     if value is not None:

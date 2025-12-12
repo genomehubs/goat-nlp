@@ -1,7 +1,7 @@
+import re
 from typing import Any
 
 from ..logging_config import get_logger
-from .helpers.constants import GOAT_DESCRIPTION
 from .helpers.fetch import fetch_valid_types
 from .utilities import fetch_valid_ranks
 
@@ -42,6 +42,129 @@ async def get_metadata_for_attribute(
     return {"error": f"Attribute '{attribute}' not found."}
 
 
+def extract_modifiers_and_operators(attribute: dict[str, Any]) -> dict[str, Any]:
+    """Extract modifiers from an attribute dict."""
+    modifiers = ["missing"]
+    operators = ["=", "!=", "exists", "missing"]
+    mods = attribute.get("summary", [])
+    if isinstance(mods, str):
+        mods = [mods]
+    for mod in mods:
+        if mod == "primary":
+            continue
+        if mod == "enum":
+            operators.extend(["<", ">", "<=", ">="])
+            continue
+        if mod == "list" and "enum" not in mods:
+            modifiers.append("length")
+            # operators.extend(["in", "not in"])
+        else:
+            modifiers.append(mod)
+    if not attribute.get("processed_type", "").endswith("keyword"):
+        operators.extend(["<", ">", "<=", ">="])
+    traverse_direction = attribute.get("traverse_direction")
+    if traverse_direction in {"up", "both", "down"}:
+        if traverse_direction in {"up", "both"}:
+            modifiers.append("descendant")
+        elif traverse_direction in {"down", "both"}:
+            modifiers.extend(("ancestral", "estimate"))
+    return modifiers, operators
+
+
+def process_attribute(attribute: dict[str, Any]) -> dict[str, Any]:
+    """Process a single attribute dict to extract modifiers and operators."""
+    modifiers, operators = extract_modifiers_and_operators(attribute)
+    description = attribute.get("description", "No description available.")
+    if long_description := attribute.get("long_description", ""):
+        description += f" {long_description}"
+    constraint = attribute.get("constraint", {})
+    value_metadata = attribute.get("value_metadata", {})
+    if value_metadata:
+        entries = []
+        for key, value in value_metadata.items():
+            if desc := value.get("description"):
+                # Remove any text in brackets from the description
+                desc = re.sub(r"\s*\(.*?\)", "", desc)
+                entries.append(f"  {key}: {desc.strip()}")
+        value_metadata = entries
+    return {
+        "name": attribute.get("name", "unknown"),
+        "description": description,
+        "processed_type": attribute.get("processed_type", "unknown"),
+        "display_group": attribute.get("display_group", ""),
+        "unit": attribute.get("unit"),
+        "possible_values": ", ".join(constraint.get("enum", [])),
+        "minimum": constraint.get("min"),
+        "maximum": constraint.get("max"),
+        "value_metadata": value_metadata,
+        # "translations": attribute.get("translate", {}),
+        "valid_modifiers": ", ".join(modifiers),
+        "valid_operators": ", ".join(operators),
+    }
+
+
+def format_processed_attribute(
+        processed_attribute: dict[str, Any],
+        match_type: str,
+        match_index: int,
+        match_count: int,
+        ) -> str:
+    """Format attribute dict into a readable string."""
+    lines = [
+        (f"Keyword match to {processed_attribute['name']} based on a {match_type} match "
+         f"at index {match_index}, with {match_count} matching words:"),
+        "",
+        f"Name: {processed_attribute['name']}",
+        "- Name Type: attribute",
+        f"- Description: {processed_attribute['description']}",
+        f"- Type: {processed_attribute['processed_type']}",
+    ]
+    if display_group := processed_attribute.get("display_group"):
+        lines.append(f"- Display Group: {display_group}")
+    if unit := processed_attribute.get("unit"):
+        lines.append(f"- Unit: {unit}")
+    if possible_values := processed_attribute.get("possible_values", ""):
+        lines.append(f"- Possible Values: {possible_values}")
+    if minimum := processed_attribute.get("minimum"):
+        lines.append(f"- Minimum: {minimum}")
+    if maximum := processed_attribute.get("maximum"):
+        lines.append(f"- Maximum: {maximum}")
+    if modifiers := processed_attribute.get("valid_modifiers", ""):
+        lines.append(f"- Valid Modifiers: {modifiers}")
+    if operators := processed_attribute.get("valid_operators", ""):
+        lines.append(f"- Valid Operators: {operators}")
+    if value_metadata := processed_attribute.get("value_metadata", []):
+        lines.append("- Value Metadata:")
+        lines.extend(iter(value_metadata))
+    return "\n".join(lines)
+
+
+def find_matches(
+    keyword_lower: str,
+    keyword_words: set[str],
+    name_search_text: str,
+) -> None:
+    """Find matches for a keyword in attribute text."""
+    match_type = None
+    match_index = -1
+    match_count = 0
+    # Check for complete phrase match first (higher priority)
+    if keyword_lower in name_search_text:
+        match_type = "whole phrase"
+        match_index = name_search_text.index(keyword_lower)
+    # If no phrase match, check if any individual words match
+    elif keyword_words and any(word in name_search_text for word in keyword_words if len(word) > 2):
+        match_type = "individual word"
+        match_index = min(
+            (name_search_text.index(word) for word in keyword_words if word in name_search_text),
+            default=-1
+        )
+    if match_type:
+        match_count = sum(word in name_search_text for word in keyword_words)
+
+    return match_type, match_index, match_count
+
+
 async def _get_attribute_context_internal(
     keyword: str, search_index: str = "taxon"
 ) -> dict[str, Any]:
@@ -49,6 +172,48 @@ async def _get_attribute_context_internal(
 
     This is called by both the resource and the tool.
     """
+
+    # Split keyword into individual words for matching
+    keyword_lower = keyword.lower()
+    keyword_words = set(keyword_lower.replace("_", " ").split())
+
+    fields = await fetch_valid_types(search_index)
+    title_attributes = []
+    value_attributes = []
+    name_attributes = []
+    rank_attributes = []
+    attributes = []
+    for name, field in fields.items():
+        # Get searchable text fields
+        processed_attribute = process_attribute(field)
+        name_lower = name.lower()
+        description = processed_attribute.get("description", "").lower()
+        display_group = processed_attribute.get("display_group", "").lower()
+        possible_values = processed_attribute.get("possible_values", "").lower()
+        value_metadata = ", ".join(processed_attribute.get("value_metadata", [])).lower()
+
+        # Create combined search text
+        name_search_text = f"{name_lower} {display_group} {description}"
+        value_search_text = f"{possible_values} {value_metadata}"
+
+        name_match_type, name_match_index, name_match_count = find_matches(
+            keyword_lower, keyword_words, name_search_text
+        )
+        if name_match_type:
+            title_attributes.append(
+                format_processed_attribute(processed_attribute, name_match_type,
+                                           name_match_index, name_match_count)
+            )
+        value_match_type, value_match_index, value_match_count = find_matches(
+            keyword_lower, keyword_words, value_search_text
+        )
+        if value_match_type:
+            value_attributes.append(
+                format_processed_attribute(processed_attribute, value_match_type,
+                                           value_match_index, value_match_count)
+            )
+
+    # Also check valid names
     valid_names = {
         "scientific name": "scientific_name",
         "common name": "common_name",
@@ -56,142 +221,179 @@ async def _get_attribute_context_internal(
         "tolid prefix": "tolid_prefix",
         "tolid": "tolid_prefix",
         "authority": "authority"}
-    fields = await fetch_valid_types(search_index)
-    if not fields:
-        return {}
-
-    # Split keyword into individual words for matching
-    keyword_lower = keyword.lower()
-    keyword_words = set(keyword_lower.replace("_", " ").split())
-
-    attributes = []
-    for name, field in fields.items():
-        # Get searchable text fields
-        name_lower = name.lower()
-        description = field.get("description", "").lower()
-        long_description = field.get("long_description", "").lower()
-        display_group = field.get("display_group", "").lower()
-
-        # Create combined search text
-        search_text = f"{name_lower} {description} {long_description} {display_group}"
-
-        # Check for complete phrase match first (higher priority)
-        if keyword_lower in search_text:
-            attr_info = {"name": name, "name_type": "attribute", **field}
-            attributes.append(attr_info)
-        # If no phrase match, check if any individual words match
-        elif keyword_words and any(word in search_text for word in keyword_words if len(word) > 2):
-            attr_info = {"name": name, "name_type": "attribute", **field}
-            attributes.append(attr_info)
-
-    # Also check valid names
     if keyword_lower.replace("_", " ") in valid_names:
-        attr_info = {"name": valid_names[keyword_lower.replace("_", " ")], "name_type": "name"}
-        attributes.append(attr_info)
+        attr_info = [
+            f"Name: {valid_names[keyword_lower.replace('_', ' ')]}"
+            "Name Type: name"
+        ]
+        name_attributes.append("\n".join(attr_info))
 
     # Also check valid ranks
     valid_ranks = await fetch_valid_ranks()
     logger.info(f"Checking keyword '{keyword_lower}' against valid ranks: {valid_ranks}")
     if keyword_lower in (rank.lower() for rank in valid_ranks):
-        attr_info = {"name": keyword_lower, "name_type": "rank"}
-        attributes.append(attr_info)
+        attr_info = [f"Name: {keyword_lower}", "Name Type: rank"]
+        rank_attributes.append("\n".join(attr_info))
 
-    return {
-        "description": GOAT_DESCRIPTION,
-        "attribute selection tips": (
-            "Use the display_group to identify relevant categories such as "
-            "assembly, genome_size and sequencing status. Choose an attribute "
-            "with a matching name or description that aligns with your "
-            "keyword. Consider the attribute type to distinguish between "
-            "different kinds of data. Keyword attributes that have an enum "
-            "can be sorted so comparison operators are valid for these "
-            "attributes."
-        ),
-        "attributes": attributes,
-    }
+    if not (title_attributes or value_attributes or name_attributes or rank_attributes):
+        return f"""No attributes, names, or ranks found matching keyword '{keyword}'.
+
+        Try different keywords or use a descriptive phrase to expand your search."""
+
+    if name_attributes:
+        attributes.extend(
+            (
+                "=== Name Matches ===",
+                "These can be used as name columns in GoaT tables.",
+                "The following name matches your keyword:",
+            )
+        )
+        attributes.extend(name_attributes)
+    if rank_attributes:
+        attributes.extend(
+            (
+                "=== Rank Matches ===",
+                "These can be used as rank columns in GoaT tables.",
+                "The following rank matches your keyword:",
+            )
+        )
+        attributes.extend(rank_attributes)
+    if title_attributes:
+        title_len = len(title_attributes)
+        title_count = f" {title_len}" if title_len > 1 else ""
+        plural = "s" if title_len > 1 else ""
+        match_plural = "" if title_len > 1 else "es"
+        attributes.extend(
+            (
+                "=== Attribute Matches ===",
+                "These can be used as attribute filters or fields in GoaT queries.",
+                f"The following{title_count} attribute{plural} match{match_plural} your keyword:",
+            )
+        )
+        attributes.extend(title_attributes)
+    if value_attributes:
+        value_len = len(value_attributes)
+        value_count = f" {value_len}" if value_len > 1 else ""
+        plural = "s" if value_len > 1 else ""
+        match_plural = "" if value_len > 1 else "es"
+        has_plural = "have" if value_len > 1 else "has a"
+        attributes.extend(
+            (
+                "=== Attribute value Matches ===",
+                "The keyword you provided matches possible values to be passed to these attribute "
+                "filters in GoaT queries.",
+                (f"The following{value_count} attribute{plural} {has_plural} value{plural} "
+                 f"that match{match_plural} your keyword:"),
+            )
+        )
+        attributes.extend(value_attributes)
+
+    taxon_note = ""
+    if search_index == "taxon":
+        taxon_note = (
+            "Note: If a user wants to know 'which species have ...', the LLM should choose an attribute "
+            "that DOES NOT support an \"ancestral\" modifier, if available, to avoid including ancestral data "
+            "in the results. Example: 'which species have assemblies?' -> use 'assembly_level' instead of "
+            "'assembly_span'.\n"
+        )
+
+    return f"""GoaT Attribute Selection Context:
+
+Choose from the following attributes, names, and ranks to filter GoaT data based on your query.
+
+The following attributes, names, and ranks match the keyword '{keyword}':
+{taxon_note}
+{"\n".join(attributes)}
+"""
 
 
 async def get_attribute_selection_context(
-    keyword: str, search_index: str = "taxon"
-) -> dict[str, Any]:
+    keyword: str,
+    comparison: str | None = None,
+    search_index: str = "taxon"
+) -> str:
     """Get context information for attribute selection.
 
     An LLM MUST use this to choose appropriate attributes to filter by
     based on a user query. The LLM MUST always check whether an attribute
     exists before using it in a query.
 
-    The LLM must check the returned 'name_type' for each attribute to
+    The LLM must check the returned 'Name type' for each attribute to
     determine whether it is an 'attribute', a 'name', or a 'rank'.
 
-    IMPORTANT: This function provides special disambiguation guidance when
-    keywords suggest confusion between target lists and sequencing status.
+    THE LLM MUST NOT make assumptions about attribute names or types
+    without checking this tool first.
+
+    THE LLM MUST use the information provided for each attribute
+    to understand how to use it correctly in a query.
 
     IMPORTANT: If you do not get results with a keyword search, try different
     keywords or use a descriptive phrase to expand your search.
 
     Args:
-        keyword: Keyword to guide attribute selection
+        keyword: Keyword or phrase  to guide attribute selection
+        comparison: Comparison context to guide attribute selection
         search_index: Index type (default: taxon)
     """
-    logger.info(f"get_attribute_selection_context called: keyword='{keyword}', search_index={search_index}")
+    logger.info(f"get_attribute_selection_context called: keyword='{keyword}', "
+                f"comparison='{comparison}', search_index={search_index}")
 
     # Check for keywords that need disambiguation guidance
-    keyword_lower = keyword.lower()
-    disambiguation_guidance = None
+    # keyword_lower = keyword.lower()
+    # disambiguation_guidance = None
 
-    # Detect project-related queries that might confuse target_list vs sequencing_status
-    project_keywords = ["dtol", "canbp", "vgp", "ebp", "project", "target", "list", "long_list"]
-    status_keywords = ["sequencing", "status", "progress", "completed", "data", "available"]
+    # # Detect project-related queries that might confuse target_list vs sequencing_status
+    # project_keywords = ["dtol", "canbp", "vgp", "ebp", "project", "target", "list", "long_list"]
+    # status_keywords = ["sequencing", "status", "progress", "completed", "data", "available"]
 
-    has_project_keyword = any(kw in keyword_lower for kw in project_keywords)
-    has_status_keyword = any(kw in keyword_lower for kw in status_keywords)
+    # has_project_keyword = any(kw in keyword_lower for kw in project_keywords)
+    # has_status_keyword = any(kw in keyword_lower for kw in status_keywords)
 
-    if has_project_keyword or has_status_keyword:
-        disambiguation_guidance = """
-⚠️  DISAMBIGUATION GUIDANCE - Read this first!
+#     if has_project_keyword or has_status_keyword:
+#         disambiguation_guidance = """
+# ⚠️  DISAMBIGUATION GUIDANCE - Read this first!
 
-If asking which species are ON a target list:
-  → Use: long_list attribute
-  → Values: dtol, canbp, vgp, ebp, etc.
-  → Example: "How many species are on the DToL target list?" → long_list=dtol
+# If asking which species are ON a target list:
+#   → Use: long_list attribute
+#   → Values: dtol, canbp, vgp, ebp, etc.
+#   → Example: "How many species are on the DToL target list?" → long_list=dtol
 
-If asking about sequencing STATUS/PROGRESS:
-  → Use: sequencing_status_dtol, sequencing_status_canbp, etc.
-  → Values: completed, in_progress, planned, etc.
-  → Example: "How many species have completed sequencing for DToL?" → sequencing_status_dtol=completed
+# If asking about sequencing STATUS/PROGRESS:
+#   → Use: sequencing_status_dtol, sequencing_status_canbp, etc.
+#   → Values: completed, in_progress, planned, etc.
+#   → Example: "How many species have completed sequencing for DToL?" → sequencing_status_dtol=completed
 
-Common confusion:
-  ✗ WRONG: "species on dtol list" → sequencing_status_dtol
-  ✓ RIGHT: "species on dtol list" → long_list=dtol
+# Common confusion:
+#   ✗ WRONG: "species on dtol list" → sequencing_status_dtol
+#   ✓ RIGHT: "species on dtol list" → long_list=dtol
 
-  ✗ WRONG: "species with completed dtol sequencing" → long_list=dtol
-  ✓ RIGHT: "species with completed dtol sequencing" → sequencing_status_dtol=completed
-"""
+#   ✗ WRONG: "species with completed dtol sequencing" → long_list=dtol
+#   ✓ RIGHT: "species with completed dtol sequencing" → sequencing_status_dtol=completed
+# """
 
-    # Detect protected/conservation status queries
-    if "protected" in keyword_lower or "conservation" in keyword_lower:
-        disambiguation_guidance = """
-⚠️  DISAMBIGUATION GUIDANCE - Read this first!
+#     # Detect protected/conservation status queries
+#     if "protected" in keyword_lower or "conservation" in keyword_lower:
+#         disambiguation_guidance = """
+# ⚠️  DISAMBIGUATION GUIDANCE - Read this first!
 
-For legal protection status:
-  → Use: protected_status attribute
-  → Example: "Which species have protected status?"
+# For legal protection status:
+#   → Use: protected_status attribute
+#   → Example: "Which species have protected status?"
 
-For threat/conservation level:
-  → Use: conservation_status attribute
-  → Example: "Which species are endangered?"
-"""
+# For threat/conservation level:
+#   → Use: conservation_status attribute
+#   → Example: "Which species are endangered?"
+# """
 
     result = await _get_attribute_context_internal(keyword, search_index)
 
     # Add disambiguation guidance at the top of the result if present
-    if disambiguation_guidance:
-        result = {
-            "IMPORTANT_READ_FIRST": disambiguation_guidance,
-            **result
-        }
+    # if disambiguation_guidance:
+    #     result = {
+    #         "IMPORTANT_READ_FIRST": disambiguation_guidance,
+    #         **result
+    #     }
 
-    logger.info(f"Found {len(result.get('attributes', []))} matching attributes")
     return result
 
 

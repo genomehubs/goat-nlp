@@ -3,6 +3,7 @@
 from typing import Any
 
 from ..logging_config import get_logger
+from .artifact_store import store
 from .helpers.constants import FIELD_CACHE
 from .helpers.fetch import fetch_valid_types
 from .helpers.validation import hash_dict, set_search_index, validate_attributes
@@ -15,12 +16,23 @@ PROCESS_ATTRIBUTES_PROMPT = """Process and validate attribute-related query para
 Follow the procedure below to extract and format the attributes correctly. Ignore any other information, this
 will be handled in other steps.
 
+If successful, this tool returns an artifact token that can be passed to goat_query().
+
 IMPORTANT: names passed to attributes, fields and sortby MUST be valid attribute names.
 You can check attribute names using get_attribute_selection_context() if needed.
 
 REMEMBER: A user query may request multiple attributes, fields, names, and ranks.
 An LLM MUST be decide if a name is an attribute filter, a field to return, a taxon name class, or a taxonomic rank
 based on the context of the user query.
+
+IMPORTANT: names and ranks MUST NOT be passed as attributes or fields.
+
+REMEMBER: chaining attributes to see if any have 'exists' will join them with AND logic such that only records with
+          values for ALL specified attributes will be returned. If this is not the desired behaviour, pass such
+          attributes as fields instead to retrieve their values without filtering.
+
+DISAMBIGUATION:
+- "found in" suggests a regional list attribute filter
 
 FOLLOW THESE STEPS EXACTLY:
 
@@ -33,7 +45,10 @@ FOLLOW THESE STEPS EXACTLY:
    VALID OPERATORS:
    - Comparison: =, !=, <, <=, >, >=
    - Set membership: in, not in (value as comma-separated list)
-   - Existence: exists
+   - Existence: exists, missing (no value needed)
+   - Ordered keyword attributes can be searched using <, <=, >, >= operators.
+     * Example: "assembly_level is chromosomal or better" →
+       [{"name": "assembly_level", "operator": ">=", "value": "chromosome"}]
 
    VALID MODIFIERS:
    - Summary: min, max, median, mean, sum, list
@@ -54,6 +69,9 @@ FOLLOW THESE STEPS EXACTLY:
      * Example: "genome_size < 3G AND assembly_level = 'complete'" →
        [{"name": "genome_size", "operator": "<", "value": "3000000000"},
         {"name": "assembly_level", "operator": "=", "value": "complete"}]
+     * Example: "on the long_list for DTOL and CANBP" →
+         [{"name": "long_list", "operator": "=", "value": ["DTOL"]},
+          {"name": "long_list", "operator": "=", "value": ["CANBP"]}]
    - For OR logic, pass a list of values.
      * example: "assembly_level in ('complete', 'chromosome')" →
        [{"name": "assembly_level", "operator": "in", "value": ["complete","chromosome"]}]
@@ -125,6 +143,33 @@ async def process_attributes(
         A dictionary with processed attributes for GoaT API queries.
 """
 
+    valid_names = {"scientific_name", "common_name", "synonym", "tolid_prefix", "authority"}
+    if names:
+        for name in names:
+            if name not in valid_names:
+                raise ValueError(
+                    f"""Invalid name '{name}' provided to process_attributes().
+Valid names are: {', '.join(valid_names)}."""
+                )
+
+    if ranks:
+        valid_ranks = await fetch_valid_ranks()
+        for rank in ranks:
+            if rank not in valid_ranks:
+                raise ValueError(
+                    f"""Invalid rank '{rank}' provided to process_attributes().
+Valid ranks are: {', '.join(valid_ranks)}."""
+                )
+
+    filtered_fields = []
+    names = names or []
+    ranks = ranks or []
+    for f in fields:
+        name = f.get("name")
+        if name and name not in names and name not in ranks:
+            filtered_fields.append(f)
+    fields = filtered_fields
+
     search_index = await set_search_index([], [], [], user_query) or "taxon"
 
     # Populate FIELD_CACHE before validation
@@ -142,23 +187,6 @@ async def process_attributes(
 Ensure attribute and field names are valid for the '{search_index}' index.
 You can check valid attribute names using get_attribute_selection_context()."""
         ) from e
-
-    valid_names = {"scientific_name", "common_name", "synonym", "tolid_prefix", "authority"}
-    if names:
-        for name in names:
-            if name not in valid_names:
-                raise ValueError(
-                    f"""Invalid name '{name}' provided to process_attributes().
-Valid names are: {', '.join(valid_names)}."""
-                )
-    if ranks:
-        valid_ranks = await fetch_valid_ranks()
-        for rank in ranks:
-            if rank not in valid_ranks:
-                raise ValueError(
-                    f"""Invalid rank '{rank}' provided to process_attributes().
-Valid ranks are: {', '.join(valid_ranks)}."""
-                )
 
     # Ensure fields is a list
     fields = fields or []
@@ -211,7 +239,9 @@ Valid ranks are: {', '.join(valid_ranks)}."""
 
     result["unique_id"] = dict_hash
 
-    return result
+    # Store canonical result and return an artifact token
+    token = store(result)
+    return {"artifact_id": token}
 
 
 process_attributes.__doc__ = PROCESS_ATTRIBUTES_PROMPT

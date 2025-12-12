@@ -3,6 +3,7 @@
 from typing import Any
 
 from ..logging_config import get_logger
+from .artifact_store import store
 from .helpers.validation import hash_dict
 
 logger = get_logger(__name__)
@@ -11,6 +12,8 @@ PROCESS_IDENTIFIERS_PROMPT = """Process and validate identifier-related query pa
 
 Follow the procedure below to extract and format the identifiers correctly. Ignore any other information, this
 will be handled in a subsequent step.
+
+If successful, this tool returns an artifact token that can be passed to goat_query().
 
 IMPORTANT: values passed to taxa MUST be valid SCIENTIFIC NAMES or IDs.
 You can check taxon names using check_taxon_exists() if needed.
@@ -120,7 +123,9 @@ async def process_identifiers(
 
     result["unique_id"] = dict_hash
 
-    return result
+    # Store canonical result and return an artifact token
+    token = store(result)
+    return {"artifact_id": token}
 
 
 process_identifiers.__doc__ = PROCESS_IDENTIFIERS_PROMPT

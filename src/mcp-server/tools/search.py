@@ -100,7 +100,7 @@ async def goat_advanced_search(
 
     For attributes:
     - Include 'operator' and 'value' keys for filtering
-    - Valid operators: '=', '!=', '>', '<', '>=', '<=', 'exists'
+    - Valid operators: '=', '!=', '>', '<', '>=', '<=', 'exists', 'in', 'not in', 'missing'
 
     CRITICAL - AND vs OR logic:
     - SEPARATE attribute dicts = logical AND ("both X and Y")

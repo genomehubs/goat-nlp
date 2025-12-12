@@ -35,15 +35,15 @@ Try a query:
 - which species with chromosomal or better assemblies have over 10Mb contiguity? - not gemini
   - what about for scaffold n50?
 - how many bat families are targeted by the vgp? - not gemini
-- which attributes support ordered keyword searches? - not gemini
+- which attributes support ordered keyword searches? - not gemini - not without fetch\_)types
 - how many cat species are missing genome size data?
 - which species are on the DTOL target list?
-- how many species have a tolid prefix beginning ilLys?
+- how many species have a tolid prefix beginning ilLys? - names only recognised in process attributes
 - how many have tolid prefixes ending cori?
 - what are the bioprojects for bats?
   - can you get me a list of all the bioprojects?
-- what is the lineage for the banded snail?
-- how many assemblies are there for species in the cat and dog families?
+- what is the lineage for the banded snail? - not without report - using ranks
+- how many assemblies are there for species in the cat and dog families? - not gpt4.1
 - show me a table of contig and scaffold n50 for all cat assemblies, sorted by contig n50
 - can you give me a table of genome size and chromosome count for the nematode groups shown in [this tree](https://media.springernature.com/lw1200/springer-static/image/art%3A10.1186%2Fs12862-019-1444-x/MediaObjects/12862_2019_1444_Fig4_HTML.png)
 - give me a table of current sequencing status for species on both the CANBP and DTOL lists
@@ -61,11 +61,29 @@ report based queries
 
   - can I have a table of the largest 5 genome sizes in that list
   - can you include a list of projects targeting each species in the table
-  - can you include a list of projects targeting each species in the table
   - can you filter the table to only include rows where bioproject is present
   - I mean apply that filter to the full query
 
 - give me the first 10 rows of a table of crab species targeted by any project. Include common name and family in the table
+
   - can you sort the table and give me the top 10 by largest genome size
   - can you restrict that to non-ancestral values for genome size
   - can you expand the search to all crustaceans
+
+- what is the sequencing status for bat species found in the UK
+
+- which whale species are on the dtol list
+
+  - are any of these also on the canbp list?
+  - which of these have an assembly?
+  - are these direct values?
+  - can you give me a table sorted by largest to smallest
+  - can you include whether the assembly is contig, scaffolf or chromosome in that table
+  - can you also add columns for common name family and haploid chromosome number
+
+- are there any crab genomes?
+  - which of these are scaffold or worse
+  - what is the status for these species in ongoing projects
+  - how many projects can you show me the status in?
+  - can you check across all these projects and just show me the ones with those crab species listed
+    - give me the full status
