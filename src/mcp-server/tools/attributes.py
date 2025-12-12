@@ -19,7 +19,7 @@ async def get_valid_types(search_index: str = "taxon") -> dict[str, Any]:
 
 async def get_metadata_for_attribute(
     attribute: str, search_index: str = "taxon"
-) -> dict[str, Any]:
+) -> str:
     """Get metadata for a specific attribute in GoaT.
 
     ONLY use this to get detailed information about a single attribute,
@@ -32,14 +32,11 @@ async def get_metadata_for_attribute(
         attribute: Name of the attribute to get metadata for
         search_index: Index type (default: taxon)
     """
-    fields = await fetch_valid_types(search_index)
-    if not fields:
-        return {}
-
+    fields = await fetch_valid_types(search_index) or {}
     if attribute in fields:
-        return fields[attribute]
+        return format_processed_attribute(process_attribute(fields[attribute]), "exact", 1, 1)
 
-    return {"error": f"Attribute '{attribute}' not found."}
+    return f"Attribute '{attribute}' not found."
 
 
 def extract_modifiers_and_operators(attribute: dict[str, Any]) -> dict[str, Any]:

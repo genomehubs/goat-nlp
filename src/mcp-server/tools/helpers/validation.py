@@ -42,7 +42,8 @@ def validate_modifier(modifier: str | list[str], meta: dict, search_index: str) 
     modifiers_to_check = [modifier] if isinstance(modifier, str) else modifier
 
     # Determine valid modifiers from metadata
-    summary_mods = list(meta.get("summary", []))
+    summary = meta.get("summary", [])
+    summary_mods = [summary] if isinstance(summary, str) else list(summary)
     if "list" in summary_mods:
         summary_mods.append("length")
     if "primary" in summary_mods:

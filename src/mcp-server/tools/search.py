@@ -273,7 +273,10 @@ using the get_attribute_selection_context or get_valid_types tools.
             parsed_fields.append(field['name'])
             if "modifier" in field:
                 for mod in field["modifier"]:
-                    if mod not in ["min", "max", "direct", "descendant", "ancestral", "missing"]:
+                    if mod not in [
+                        "min", "max", "mean", "median", "mode", "length",
+                        "direct", "descendant", "ancestral", "missing"
+                    ]:
                         logger.warning(f"Ignoring invalid modifier '{mod}' for field '{field['name']}'")
                         continue
                     parsed_fields.append(f"{field['name']}%3A{mod}")
