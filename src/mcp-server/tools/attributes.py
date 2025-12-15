@@ -331,6 +331,9 @@ async def get_attribute_selection_context(
     IMPORTANT: If the user wants to know about chromosome count, it is better to also
     return chromosome number as this is more likely to be the required field.
 
+    IMPORTANT: for questions about a project, bioproject is only the correct attribute
+    if the user specifically mentions bioproject or if the value begins with "PRJ".
+
     Args:
         keyword: Keyword or phrase  to guide attribute selection
         comparison: Comparison context to guide attribute selection

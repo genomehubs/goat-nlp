@@ -103,3 +103,11 @@ other test queries
 - have any squirrels been sequenced under a bioproject starting prjeb4
 
 - how many stony corals are there excluding names that contain sp. or cf.
+
+- what is the contig and scaffold n50 for assemblies GCA_964273405.1 and GCA_964273435.1?
+
+- how many lepidoptera assemblies were sequenced between may and october 2024
+  - can you give me the top 10 by assembly span
+  - what was the lowest and highest scaffold n50 for assemblies in that period
+  - what about for only project psyche
+    - the project psyche bioproject is PRJEB71705

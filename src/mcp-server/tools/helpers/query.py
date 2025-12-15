@@ -83,6 +83,18 @@ def build_query_string(
     if rank:
         query_parts.append(f"tax_rank%28{rank}%29")
 
+    if assemblies:
+        escaped_assemblies = [
+            assembly.replace('*', '%2A').replace(":", "%3A").replace("!", "%21") for assembly in assemblies
+        ]
+        query_parts.append(f"assembly_id%3D{'%2C'.join(escaped_assemblies)}")
+
+    if samples:
+        escaped_samples = [
+            sample.replace('*', '%2A').replace(":", "%3A").replace("!", "%21") for sample in samples
+        ]
+        query_parts.append(f"sample_id%3D{'%2C'.join(escaped_samples)}")
+
     if attributes:
         if attr_string := format_attributes(attributes):
             # Remove leading %20AND%20

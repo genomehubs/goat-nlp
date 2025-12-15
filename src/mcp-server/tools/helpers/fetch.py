@@ -27,7 +27,7 @@ async def fetch_valid_types(search_index: str = "taxon") -> dict[str, Any]:
             return constants.FIELD_CACHE[search_index]
 
     # Cache miss or expired - fetch from API
-    url = f"{constants.GOAT_API_BASE}/resultFields?index={search_index}"
+    url = f"{constants.GOAT_API_BASE}/resultFields?result={search_index}"
     data = await make_goat_request(url)
     if not data or "fields" not in data:
         return {}
