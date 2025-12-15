@@ -66,6 +66,7 @@ def build_query_string(
         escaped_taxon = (
             taxon.replace('*', '%2A')
             .replace(":", "%3A")
+            .replace("!", "%21")
             .replace(",", "%2C")
             .replace("[", "%5B")
             .replace("]", "%5D")

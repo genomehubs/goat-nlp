@@ -101,3 +101,5 @@ other test queries
   - do any have busco scores
 
 - have any squirrels been sequenced under a bioproject starting prjeb4
+
+- how many stony corals are there excluding names that contain sp. or cf.

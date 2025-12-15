@@ -94,7 +94,7 @@ FOLLOW THESE STEPS EXACTLY:
    - "common name contains 'bat'" → ["common_name:*bat*"]
    - "synonym is 'Canis'" → ["synonym:Canis"]
    - "authority ends with 'Linnaeus'" → ["authority:*Linnaeus"]
-   - "tolip_prefix starts with ilLys" → ["tolid_prefix:ilLys*"]
+   - "tolip_prefix does not start with ilLys" → ["tolid_prefix:!ilLys*"]
 
 4. **ranks**: Taxonomic ranks to include in the response.
    These are ranks that the user request to be returned as fields.
@@ -184,9 +184,32 @@ Valid ranks are: {', '.join(valid_ranks)}."""
 
     try:
         if attributes:
+            nameless_attributes = []
+            for attr in attributes:
+                if attr.get("name", "") in valid_names:
+                    if attr.get("value") is not None:
+                        values = attr["value"]
+                        if not isinstance(values, list):
+                            values = [values]
+                        values = [str(v).replace("* ", "*").replace(" *", "*") for v in values]
+                        if attr.get("operator", "") in {"not in", "!="}:
+                            # prepend '!' to each value for negation
+                            values = [f"!{v}" for v in values]
+                        names.append(f"{attr['name']}:{','.join(values)}")
+                    else:
+                        names.append(attr["name"])
+                elif attr.get("name", "") in ranks:
+                    ranks.append(attr["name"])
+                else:
+                    nameless_attributes.append(attr)
+            attributes = nameless_attributes
             validate_attributes(attributes, search_index=search_index, field_cache=FIELD_CACHE)
         if fields:
-            validate_attributes(fields, search_index=search_index, field_cache=FIELD_CACHE)
+            attr_fields = [
+                f for f in (fields or [])
+                if f.get("name") not in valid_names and f.get("name") not in ranks
+            ]
+            validate_attributes(attr_fields, search_index=search_index, field_cache=FIELD_CACHE)
     except ValueError as e:
         raise ValueError(
             f"""Validation error in process_attributes(): {e}

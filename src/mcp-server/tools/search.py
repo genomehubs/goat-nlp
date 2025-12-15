@@ -249,13 +249,18 @@ using the get_attribute_selection_context or get_valid_types tools.
         logger.info(f"Processed modifiers in {len(attributes)} attributes")
 
     filtered_names = []
+    extra_taxa = []
     taxa_length_before = len(taxa or [])
     for name in names or []:
         parts = name.split(":")
-        if len(parts) == 2 and parts[0].replace("_", " ") in [
-            "scientific name", "common name", "synonym", "tolid prefix", "authority"
-        ]:
-            taxa.append(f"{parts[0].replace('_', ' ')}:{parts[1]}")
+        if len(parts) == 2:
+            if parts[0].replace("_", " ") in {
+                "common name", "synonym", "tolid prefix", "authority"
+            }:
+                taxa.append(f"{parts[0].replace('_', ' ')}:{parts[1]}")
+            elif parts[0].replace("_", " ") == "scientific name":
+                extra_taxa.extend(parts[1].split(","))
+                filtered_names.append(name)
         else:
             filtered_names.append(name)
     if len(filtered_names) != len(names or []):
@@ -269,6 +274,7 @@ using the get_attribute_selection_context or get_valid_types tools.
             it is valid to do so."""
 
     names = filtered_names
+    taxa = (taxa or []) + extra_taxa
 
     query_string = build_query_string(taxa, rank, attributes, assemblies, samples, taxon_filter_type)
     exclusions = set_exclusions(attributes)
