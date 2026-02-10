@@ -1,2 +1,4 @@
 fastmcp
 httpx
+jinja2
+starlette

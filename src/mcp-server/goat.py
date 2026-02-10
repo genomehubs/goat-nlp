@@ -1,11 +1,21 @@
 import inspect
 import os
+from pathlib import Path
+from typing import Any, Dict
 
 from fastmcp import FastMCP
 from fastmcp.server.middleware.caching import ResponseCachingMiddleware
 from fastmcp.server.middleware.timing import DetailedTimingMiddleware, TimingMiddleware
 from httpx import Request
-from starlette.responses import JSONResponse
+from jinja2 import Template
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import FileResponse, HTMLResponse, JSONResponse
+
+try:
+    from .config import BROWSER_PAGE_CONFIG, LOGO_FILE
+except ImportError:
+    # Fallback to example config if custom config is not provided
+    from .config_example import BROWSER_PAGE_CONFIG, LOGO_FILE
 
 from .logging_config import get_logger
 from .prompts.system import (
@@ -13,16 +23,57 @@ from .prompts.system import (
     get_parser_based_prompt,
     get_simple_search_prompt,
 )
-from .resources import register_resources
 from .tools import register_all_tools
 
 logger = get_logger(__name__)
 
+# Load browser page template
+_BROWSER_PAGE_TEMPLATE = None
+
+
+def get_browser_page_template() -> Template:
+    """Load and cache the browser page template."""
+    global _BROWSER_PAGE_TEMPLATE
+    if _BROWSER_PAGE_TEMPLATE is None:
+        html_file = Path(__file__).parent / "browser_page.html"
+        template_str = html_file.read_text(encoding="utf-8")
+        _BROWSER_PAGE_TEMPLATE = Template(template_str)
+    return _BROWSER_PAGE_TEMPLATE
+
+
+def render_browser_page(config: Dict[str, Any] = None) -> str:
+    """Render the browser page with custom configuration."""
+    template = get_browser_page_template()
+    config = config or BROWSER_PAGE_CONFIG
+    # Add logo_path derived from logo filename
+    render_config = {**config, "logo_path": "/site_logo.png"}
+    return template.render(**render_config)
+
+
+# Middleware to serve HTML for browser GET requests to /mcp
+class BrowserFriendlyMCPMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        # Only intercept GET requests to /mcp
+        if request.method == "GET" and request.url.path == "/mcp":
+            accept_header = request.headers.get("accept", "").lower()
+            user_agent = request.headers.get("user-agent", "").lower()
+
+            # Check if this is a browser
+            is_browser = (
+                "text/html" in accept_header or
+                ("text/event-stream" not in accept_header and
+                 any(ua in user_agent for ua in ["mozilla", "chrome", "safari", "edge", "opera"]))
+            )
+
+            if is_browser:
+                return HTMLResponse(render_browser_page())
+
+        # For everything else, continue to next middleware/handler
+        return await call_next(request)
+
+
 # Initialize FastMCP server
 mcp = FastMCP("goat")
-
-# Register resources
-register_resources(mcp)
 
 # Register tools
 register_all_tools(mcp)
@@ -35,6 +86,8 @@ mcp.add_middleware(DetailedTimingMiddleware())
 
 # Caching middleware to cache responses
 mcp.add_middleware(ResponseCachingMiddleware())
+
+# NOTE: Browser-friendly middleware is added in main() by wrapping the ASGI app
 
 # Constants
 GOAT_API_BASE = "https://goat.genomehubs.org/api/v2"
@@ -114,10 +167,30 @@ async def list_tools_debug(request: Request):
     return JSONResponse({"registered_tools": tool_names})
 
 
+@mcp.custom_route("/site_logo.png", methods=["GET"])
+async def serve_logo(request: Request):
+    """Serve the site logo image."""
+    logo_path = Path(__file__).parent / LOGO_FILE
+    if logo_path.exists():
+        return FileResponse(logo_path, media_type="image/png")
+    else:
+        return JSONResponse({"error": "Logo not found"}, status_code=404)
+
+
 def main():
-    # Initialize and run an HTTP server on port 8008
-    mcp.run(transport="streamable-http", host="127.0.0.1", port=8008)
+    # Get the underlying Starlette app and add our middleware directly
+    # This ensures it runs before FastMCP's internal routing
+    app = mcp.http_app(transport="streamable-http")
+
+    # Wrap the app with our browser-friendly middleware
+    wrapped_app = BrowserFriendlyMCPMiddleware(app)
+
+    # Run the wrapped app
+    import uvicorn
+    uvicorn.run(wrapped_app, host="127.0.0.1", port=8008)
 
 
 if __name__ == "__main__":
+    main()
+    main()
     main()
