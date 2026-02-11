@@ -1,13 +1,15 @@
-"""Shared logging configuration for GoaT MCP server."""
+"""Shared logging configuration for GenomeHubs MCP server."""
 
 import logging
+
+from .config import SITE_NAME
 
 # Configure logging once at module import time
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('/tmp/goat-mcp.log'),
+        logging.FileHandler(f'/tmp/{SITE_NAME}-mcp.log'),
         logging.StreamHandler()
     ]
 )

@@ -1,10 +1,11 @@
+"""Query building utilities for GenomeHubs MCP server."""
+
 from urllib.parse import quote
 
+from ...config import DATASTORE_NAME
 from ...logging_config import get_logger
 
 logger = get_logger(__name__)
-
-"""Query building utilities for GoaT MCP server."""
 
 
 def convert_size_to_bytes(value: str | int | float) -> int | str:
@@ -52,7 +53,7 @@ def build_query_string(
     samples: list[str] | None = None,
     taxon_filter_type: str = "children",
 ) -> str:
-    """Build a GoaT query string from optional components.
+    f"""Build a {DATASTORE_NAME} query string from optional components.
 
     Args:
         taxon: Optional taxonomic scope
@@ -104,7 +105,7 @@ def build_query_string(
 
 
 def format_attributes(attributes: list[dict]) -> str:
-    """Format a list of attribute filters into a GoaT query string."""
+    f"""Format a list of attribute filters into a {DATASTORE_NAME} query string."""
     formatted_attrs = []
     for attr in attributes:
         name = attr.get("name")
@@ -246,7 +247,10 @@ def set_search_tips(attributes: list[dict] | None, fields: list[dict] | None, in
     """
     tips = []
     if not attributes:
-        tips.append("No specific attributes selected. You can ask about various attributes available in GoaT.")
+        tips.append(
+            f"No specific attributes selected. You can ask about various attributes "
+            f"available in {DATASTORE_NAME}."
+        )
 
     if intent == "table" and not fields:
         tips.append(

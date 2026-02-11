@@ -7,10 +7,10 @@ The MCP server includes a user-friendly browser page that can be fully customise
 1. **Copy the example configuration:**
 
    ```bash
-   cp config_example.py config.py
+   cp config_example.py config_site.py
    ```
 
-2. **Edit `config.py` to customize your site:**
+2. **Edit `config_site.py` to customize your site:**
 
    ```python
    BROWSER_PAGE_CONFIG = {
@@ -64,7 +64,7 @@ To customize colors, fonts, or layout, edit `browser_page.html` directly. The CS
 
 ## No Configuration File
 
-If no `config.py` exists, the server uses default GoaT branding and configuration from `goat.py`.
+If no `config_site.py` exists, the server uses default GoaT branding and configuration from `server.py`.
 
 ```
 

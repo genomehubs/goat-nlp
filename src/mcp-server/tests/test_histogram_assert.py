@@ -2,8 +2,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
-GOAT_PATH = Path(__file__).resolve().parents[1] / "goat.py"
-spec = importlib.util.spec_from_file_location("goat_module", GOAT_PATH)
+SERVER_PATH = Path(__file__).resolve().parents[1] / "server.py"
+spec = importlib.util.spec_from_file_location("server_module", SERVER_PATH)
 mod = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = mod
 spec.loader.exec_module(mod)

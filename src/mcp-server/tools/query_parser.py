@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from ..config import DATASTORE_NAME
 from ..logging_config import get_logger
 from .artifact_store import retrieve
 from .helpers.constants import FIELD_CACHE
@@ -12,7 +13,8 @@ from .helpers.validation import validate_attribute_name
 logger = get_logger(__name__)
 
 
-PROCESS_ATTRIBUTES_PROMPT = """Parse query parameters to form a GoaT URL and return optional count and table.
+PROCESS_ATTRIBUTES_PROMPT = f"""Parse query parameters to form a {DATASTORE_NAME} URL, optionally
+return a count and table.
 
 CRITICAL: ONLY RUN THIS TOOL AFTER PROCESSING IDENTIFIERS WITH process_identifiers()
           AND ATTRIBUTES WITH process_attributes()!
@@ -44,14 +46,14 @@ If intent is table, ALSO PROCESS:
 
 EXAMPLE:
 Query: "How many mammal species have minimum directly measured genome size < 3G?"
-Step 1: process_identifiers() output → IDENTIFIERS_OUTPUT = {
+Step 1: process_identifiers() output → IDENTIFIERS_OUTPUT = {{
     artifact_id: aebc12345...,
-}
-Step 2: process_attributes() output → ATTRIBUTES_OUTPUT = {
+}}
+Step 2: process_attributes() output → ATTRIBUTES_OUTPUT = {{
     artifact_id: fghd67890...,
-}
+}}
 THEN CALL:
-goat_query(
+submit_query(
     identifiers_artifact_id=IDENTIFIERS_ARTIFACT_ID,
     attributes_artifact_id=ATTRIBUTES_ARTIFACT_ID,
     intent="count",
@@ -97,7 +99,7 @@ DO NOT CALL unless you've completed all 8 steps above!
 """
 
 
-async def goat_query(
+async def submit_query(
     identifiers_artifact_id: str,
     attributes_artifact_id: str,
     intent: str,
@@ -107,7 +109,7 @@ async def goat_query(
     size: int | None = None,
     page: int = 1,
 ) -> dict[str, Any]:
-    """Parse processed attributes and identifiers into a GoaT URL and optionally return a count and table.
+    f"""Parse processed attributes and identifiers into a {DATASTORE_NAME} URL, optionally return a count and table.
 
     Args:
         identifiers_artifact_id: Artifact id from process_identifiers() containing identifier-related parameters.
@@ -131,7 +133,7 @@ async def goat_query(
 
     if not isinstance(identifiers_output, dict):
         raise ValueError(
-            "Invalid identifiers_artifact_id provided to goat_query().\n"
+            "Invalid identifiers_artifact_id provided to submit_query().\n"
             "Ensure you pass the EXACT key from process_identifiers()\n"
             "WITHOUT modification.\n\n"
             "Note that the identifiers artifact is only valid for a limited time after creation.\n"
@@ -139,7 +141,7 @@ async def goat_query(
         )
     if not isinstance(attributes_output, dict):
         raise ValueError(
-            "Invalid attributes_artifact_id provided to goat_query().\n"
+            "Invalid attributes_artifact_id provided to submit_query().\n"
             "Ensure you pass the EXACT key from process_attributes()\n"
             "WITHOUT modification.\n\n"
             "Note that the attributes artifact is only valid for a limited time after creation.\n"
@@ -148,13 +150,13 @@ async def goat_query(
 
     # if not validate_dict(attributes_output) or not validate_dict(identifiers_output):
     #     raise ValueError(
-    #         "Invalid identifiers_artifact_id or attributes_artifact_id provided to goat_query().\n"
+    #         "Invalid identifiers_artifact_id or attributes_artifact_id provided to submit_query().\n"
     #         "Ensure you pass the EXACT key from process_identifiers() and process_attributes()\n"
     #         "WITHOUT modification."
     #     )
     if intent not in {"count", "table", "histogram", "record"}:
         raise ValueError(
-            f"""Invalid intent '{intent}' provided to goat_query().\n"""
+            f"""Invalid intent '{intent}' provided to submit_query().\n"""
             f"""Valid intents are: "count", "table", "histogram", or "record"."""
         )
 
@@ -186,10 +188,10 @@ async def goat_query(
     ranks = attributes_output.get("ranks", [])
 
     # Import here to avoid circular dependency
-    from .search import goat_advanced_search
+    from .search import advanced_search
 
-    # Delegate to goat_advanced_search with the parsed components
-    result = await goat_advanced_search(
+    # Delegate to advanced_search with the parsed components
+    result = await advanced_search(
         user_query=user_query,
         search_index=search_index,
         taxa=taxa,
@@ -222,7 +224,7 @@ async def goat_query(
 
 
 # Set the runtime docstring / tool description to the selected LLM prompt.
-goat_query.__doc__ = PROCESS_ATTRIBUTES_PROMPT
+submit_query.__doc__ = PROCESS_ATTRIBUTES_PROMPT
 
 
 def register_tools(mcp) -> None:
@@ -231,4 +233,4 @@ def register_tools(mcp) -> None:
     Args:
         mcp: FastMCP instance to register tools with
     """
-    mcp.tool()(goat_query)
+    mcp.tool()(submit_query)

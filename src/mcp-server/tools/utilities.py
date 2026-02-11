@@ -1,8 +1,8 @@
 import re
 import time
 
-from .helpers.api import make_goat_request
-from .helpers.constants import GOAT_API_BASE
+from ..config import API_BASE, DATASTORE_NAME, SITE_NAME
+from .helpers.api import make_api_request
 
 RANK_CACHE: list[str] = []
 _RANK_CACHE_TIMESTAMP: float = 0.0
@@ -10,7 +10,7 @@ RANK_CACHE_TTL_SECONDS = 24 * 60 * 60  # 24 hours
 
 
 async def fetch_valid_ranks() -> list[str]:
-    """Internal function to fetch valid taxon ranks from GoaT API.
+    f"""Internal function to fetch valid taxon ranks from {DATASTORE_NAME} API.
 
     Uses in-memory cache with 24-hour TTL to avoid repeated API calls."""
     global RANK_CACHE, _RANK_CACHE_TIMESTAMP
@@ -21,10 +21,10 @@ async def fetch_valid_ranks() -> list[str]:
         return RANK_CACHE
 
     # Cache miss or expired - fetch from API
-    url = f"{GOAT_API_BASE}/taxonomicRanks"
-    data = await make_goat_request(url)
+    url = f"{API_BASE}/taxonomicRanks"
+    data = await make_api_request(url)
     if not data or "ranks" not in data:
-        return {}
+        return []
 
     # Store in cache
     ranks = data["ranks"]
@@ -35,19 +35,19 @@ async def fetch_valid_ranks() -> list[str]:
 
 
 async def get_valid_ranks() -> list[str]:
-    """Fetch valid taxon ranks from GoaT API."""
+    f"""Fetch valid taxon ranks from {DATASTORE_NAME} API."""
     return await fetch_valid_ranks()
 
 
 async def get_example_queries(category: str = "all") -> str:
-    """Get example queries to demonstrate GoaT capabilities.
+    f"""Get example queries to demonstrate {DATASTORE_NAME} capabilities.
 
     Use this tool to help users understand what kinds of questions they can ask.
     If resources are sorted then prefer the get_example_queries_resource resource.
 
     CRITICAL: The LLM MUST use this tool to answer requests for example queries.
 
-    IMPORTANT: TThe LLM should present the example queries as the user would type them
+    IMPORTANT: The LLM should present the example queries as the user would type them
     and only show the examples relevant to the requested category.
 
     If no category is specified, return basic examples and prompt the user that they
@@ -63,8 +63,8 @@ async def get_example_queries(category: str = "all") -> str:
             - "advanced": Complex searches
     """
     examples = {
-        "basic": """**Basic Counting Queries:**
-- How many species are in GoaT?
+        "basic": f"""**Basic Counting Queries:**
+- How many species are in {DATASTORE_NAME}?
 - How many bat families are targeted by the VGP?
 - How many cat species are missing genome size data?""",
 
@@ -97,12 +97,12 @@ async def get_example_queries(category: str = "all") -> str:
 
 
 async def choose_search_index(query: str) -> str:
-    """Choose the appropriate GoaT search index based on what is being counted/listed.
+    f"""Choose the appropriate {DATASTORE_NAME} search index based on what is being counted/listed.
 
     CRITICAL: Choose the index based on what the user wants to COUNT or LIST, not what
     attributes they want to filter by.
 
-    GoaT supports three search indices:
+    {DATASTORE_NAME} supports three search indices:
 
     1. **taxon** (DEFAULT) - Use when counting/listing TAXONOMIC UNITS:
        - "How many species..." → taxon index
@@ -194,18 +194,18 @@ async def choose_search_index(query: str) -> str:
 
 
 async def check_taxon_exists(name: str) -> dict:
-    """Check if a specific taxon name exists in GoaT and get basic info.
+    f"""Check if a specific taxon name exists in {DATASTORE_NAME} and get basic info.
 
-    CRITICAL: Use this tool to validate scientific names before calling search_goat,
+    CRITICAL: Use this tool to validate scientific names before calling submit_query,
     especially when:
     - The user provides a common name that you've translated to scientific
     - You're uncertain about the correct scientific name
     - The taxon name is unfamiliar or complex
-    - You want to verify the taxon exists in GoaT
+    - You want to verify the taxon exists in {DATASTORE_NAME}
 
     This tool handles the translation from common names to scientific names.
     You should provide the scientific name you believe is correct, and this
-    tool will validate it and return a query_string for use in search_goat.
+    tool will validate it and return a query_string for use in submit_query.
 
     Common name translations you should make before calling this tool:
     - "mammals" → check_taxon_exists("Mammalia")
@@ -214,34 +214,34 @@ async def check_taxon_exists(name: str) -> dict:
     - "bats" → check_taxon_exists("Chiroptera")
 
     The returned dict includes a query_string field, which should be used
-    as the taxon parameter in subsequent GoaT search_goat calls for best results.
+    as the taxon parameter in subsequent {DATASTORE_NAME} submit_query calls for best results.
 
     Args:
         name: Scientific taxon name to check (e.g., 'Mammalia', 'Felidae', 'Canis')
     """
-    # Test if this taxon has any data in GOAT by doing a simple count query
+    # Test if this taxon has any data by doing a simple count query
     url = (
-        f"{GOAT_API_BASE}/count?query=tax_tree%28{name}%29"
+        f"{API_BASE}/count?query=tax_tree%28{name}%29"
         f"&result=taxon&offset=0&includeEstimates=true&taxonomy=ncbi"
     )
-    data = await make_goat_request(url)
+    data = await make_api_request(url)
 
     if not data or "count" not in data:
         return {
             "exists": False,
             "scientific_name": name,
-            "error": "Unable to query GOAT API",
+            "error": f"Unable to query {DATASTORE_NAME} API",
         }
 
     if data["count"] == 0:
-        return {"exists": False, "scientific_name": name, "count_in_goat": 0}
+        return {"exists": False, "scientific_name": name, f"count_in_{SITE_NAME}": 0}
 
     # Try to get more info about this taxon
     taxon_url = (
-        f"{GOAT_API_BASE}/search?query=tax_name%28{name}%29"
+        f"{API_BASE}/search?query=tax_name%28{name}%29"
         f"&result=taxon&size=1&taxonomy=ncbi"
     )
-    taxon_data = await make_goat_request(taxon_url)
+    taxon_data = await make_api_request(taxon_url)
 
     # Extract basic info
     rank = "Unknown"
@@ -262,12 +262,12 @@ async def check_taxon_exists(name: str) -> dict:
         "rank": rank,
         "taxon_id": taxon_id,
         "query_string": f"{taxon_id}[{name}]",
-        "count_in_goat": data["count"],
+        f"count_in_{SITE_NAME}": data["count"],
     }
 
 
 def register_tools(mcp) -> None:
-    """Register GoaT utility tools with the FastMCP instance.
+    """Register utility tools with the FastMCP instance.
 
     Args:
         mcp: FastMCP instance to register tools with

@@ -1,4 +1,4 @@
-"""URL utilities for GoaT MCP server."""
+"""URL utilities for GenomeHubs MCP server."""
 
 
 def update_query_string(search_url: str, parameter: str, value: str) -> str:

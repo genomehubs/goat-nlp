@@ -1,6 +1,7 @@
 import re
 from typing import Any
 
+from ..config import DATASTORE_NAME
 from ..logging_config import get_logger
 from .helpers.fetch import fetch_valid_types
 from .utilities import fetch_valid_ranks
@@ -9,7 +10,7 @@ logger = get_logger(__name__)
 
 
 async def get_valid_types(search_index: str = "taxon") -> dict[str, Any]:
-    """Fetch valid attribute types from GoaT API.
+    f"""Fetch valid attribute types from {DATASTORE_NAME} API.
 
     Args:
         search_index: Index type (default: taxon)
@@ -20,7 +21,7 @@ async def get_valid_types(search_index: str = "taxon") -> dict[str, Any]:
 async def get_metadata_for_attribute(
     attribute: str, search_index: str = "taxon"
 ) -> str:
-    """Get metadata for a specific attribute in GoaT.
+    f"""Get metadata for a specific attribute in {DATASTORE_NAME}.
 
     ONLY use this to get detailed information about a single attribute,
     such as its description, type, and possible values. If you are unsure if an attribute exists or
@@ -241,7 +242,7 @@ async def _get_attribute_context_internal(
         attributes.extend(
             (
                 "=== Name Matches ===",
-                "These can be used as name columns in GoaT tables.",
+                f"These can be used as name columns in {DATASTORE_NAME} tables.",
                 "The following name matches your keyword:",
             )
         )
@@ -250,7 +251,7 @@ async def _get_attribute_context_internal(
         attributes.extend(
             (
                 "=== Rank Matches ===",
-                "These can be used as rank columns in GoaT tables.",
+                f"These can be used as rank columns in {DATASTORE_NAME} tables.",
                 "The following rank matches your keyword:",
             )
         )
@@ -263,7 +264,7 @@ async def _get_attribute_context_internal(
         attributes.extend(
             (
                 "=== Attribute Matches ===",
-                "These can be used as attribute filters or fields in GoaT queries.",
+                f"These can be used as attribute filters or fields in {DATASTORE_NAME} queries.",
                 f"The following{title_count} attribute{plural} match{match_plural} your keyword:",
             )
         )
@@ -277,8 +278,8 @@ async def _get_attribute_context_internal(
         attributes.extend(
             (
                 "=== Attribute value Matches ===",
-                "The keyword you provided matches possible values to be passed to these attribute "
-                "filters in GoaT queries.",
+                f"The keyword you provided matches possible values to be passed to these attribute "
+                f"filters in {DATASTORE_NAME} queries.",
                 (f"The following{value_count} attribute{plural} {has_plural} value{plural} "
                  f"that match{match_plural} your keyword:"),
             )
@@ -294,9 +295,9 @@ async def _get_attribute_context_internal(
             "'assembly_span'.\n"
         )
 
-    return f"""GoaT Attribute Selection Context:
+    return f"""{DATASTORE_NAME} Attribute Selection Context:
 
-Choose from the following attributes, names, and ranks to filter GoaT data based on your query.
+Choose from the following attributes, names, and ranks to filter {DATASTORE_NAME} data based on your query.
 
 The following attributes, names, and ranks match the keyword '{keyword}':
 {taxon_note}
@@ -346,7 +347,7 @@ async def get_attribute_selection_context(
 
 
 def register_tools(mcp) -> None:
-    """Register GoaT attribute tools with the FastMCP instance.
+    """Register attribute tools with the FastMCP instance.
 
     Args:
         mcp: FastMCP instance to register tools with

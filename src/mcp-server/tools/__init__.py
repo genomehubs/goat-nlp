@@ -1,8 +1,8 @@
-# Tools package for GoaT MCP server
+# Tools package for GenomeHubs MCP server
 
 def register_all_tools(mcp):
     """Register all tools with the given MCP server instance."""
-    from . import (  # search,; simple_search,; record,; report,
+    from . import (  # record,; report,
         attributes,
         process_attributes,
         process_identifiers,
@@ -16,6 +16,4 @@ def register_all_tools(mcp):
     query_parser.register_tools(mcp)
     # record.register_tools(mcp)
     # report.register_tools(mcp)
-    # search.register_tools(mcp)
-    # simple_search.register_tools(mcp)
     utilities.register_tools(mcp)

@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from ..config import DATASTORE_NAME
 from ..logging_config import get_logger
 from .artifact_store import store
 from .helpers.constants import FIELD_CACHE
@@ -11,12 +12,13 @@ from .utilities import fetch_valid_ranks
 
 logger = get_logger(__name__)
 
-PROCESS_ATTRIBUTES_PROMPT = """Process and validate attribute-related query parameters for GoaT API queries.
+PROCESS_ATTRIBUTES_PROMPT = (
+    f"""Process and validate attribute-related query parameters for {DATASTORE_NAME} API queries.
 
 Follow the procedure below to extract and format the attributes correctly. Ignore any other information, this
 will be handled in other steps.
 
-If successful, this tool returns an artifact token that can be passed to goat_query().
+If successful, this tool returns an artifact token that can be passed to submit_query().
 
 IMPORTANT: names passed to attributes, fields and sortby MUST be valid attribute names.
 You can check attribute names using get_attribute_selection_context() if needed.
@@ -126,7 +128,7 @@ process_attributes(
 )
 
 DO NOT CALL unless you've completed all 5 steps above!
-"""
+""")
 
 
 async def process_attributes(
@@ -148,7 +150,7 @@ async def process_attributes(
         search_index: The search index to use ("taxon", "assembly", or "sample")
 
     Returns:
-        A dictionary with processed attributes for GoaT API queries.
+        A dictionary with processed attributes for {DATASTORE_NAME} API queries.
 """
 
     valid_names = {"scientific_name", "common_name", "synonym", "tolid_prefix", "authority"}

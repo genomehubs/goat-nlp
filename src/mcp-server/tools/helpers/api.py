@@ -1,17 +1,17 @@
-"""API request utilities for GoaT MCP server."""
+"""API request utilities for GenomeHubs MCP server."""
 
 from typing import Any
 
 import httpx
 
+from ...config import USER_AGENT
 from ...logging_config import get_logger
-from .constants import USER_AGENT
 
 logger = get_logger(__name__)
 
 
-async def make_goat_request(url: str) -> dict[str, Any] | None:
-    """Make a request to the GoaT API with proper error handling."""
+async def make_api_request(url: str) -> dict[str, Any] | None:
+    """Make a request to the GenomeHubs API with proper error handling."""
     logger.info(f"API Request: {url}")
     headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
     async with httpx.AsyncClient(follow_redirects=True) as client:

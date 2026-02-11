@@ -1,4 +1,4 @@
-"""Validation utilities for GoaT MCP server."""
+"""Validation utilities for GenomeHubs MCP server."""
 
 import hashlib
 import json
@@ -6,6 +6,7 @@ import json
 # import secrets
 from typing import Any
 
+from ...config import DATASTORE_NAME
 from ...logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -118,7 +119,7 @@ def validate_modifier(modifier: str | list[str], meta: dict, search_index: str) 
 
 
 def validate_operator(operator: str, meta: dict) -> str:
-    """Validate and return a proper GoaT operator."""
+    f"""Validate and return a proper {DATASTORE_NAME} operator."""
     if operator is None or not isinstance(operator, str) or not operator.strip():
         return None
     valid_operators = {
@@ -170,7 +171,7 @@ def validate_operator(operator: str, meta: dict) -> str:
 
 
 def validate_attribute_value(value: Any, meta: dict) -> str:
-    """Validate and format an attribute value for GoaT query."""
+    f"""Validate and format an attribute value for {DATASTORE_NAME} query."""
     if meta.get("processed_type", "").endswith("keyword") and meta.get("constraint", {}).get("enum"):
         valid_values = [v.lower() for v in meta["constraint"]["enum"]]
         if isinstance(value, str):
@@ -185,16 +186,16 @@ def validate_attribute_value(value: Any, meta: dict) -> str:
 
 
 def validate_attribute_name(name: str, search_index: str, field_cache: dict) -> str:
-    """Validate attribute name for GoaT query."""
+    f"""Validate attribute name for {DATASTORE_NAME} query."""
     if name is None or not isinstance(name, str) or not name.strip():
         raise ValueError("Attribute name must be a non-empty string.")
     if name not in field_cache.get(search_index, {}):
-        raise ValueError(f"Attribute name '{name}' not found in GoaT for index '{search_index}'.")
+        raise ValueError(f"Attribute name '{name}' not found in {DATASTORE_NAME} for index '{search_index}'.")
     return name
 
 
 def validate_attribute(attr: dict, search_index: str, field_cache: dict) -> dict:
-    """Validate attribute name, operator, value, and modifier for GoaT query.
+    f"""Validate attribute name, operator, value, and modifier for {DATASTORE_NAME} query.
 
     Also preserves modifier field if present for backend processing.
     Valid modifiers: "missing", "direct", "ancestral", "descendant", "estimated", "min", "max", "median", "length"
@@ -227,7 +228,10 @@ def validate_attribute(attr: dict, search_index: str, field_cache: dict) -> dict
     if operator is not None:
         if (
             (isinstance(value, str) and value in {"ancestral", "descendant", "estimated", "direct", "missing"})
-            or (isinstance(value, list) and all(v in {"ancestral", "descendant", "estimated", "direct", "missing"} for v in value))
+            or (
+                isinstance(value, list)
+                and all(v in {"ancestral", "descendant", "estimated", "direct", "missing"} for v in value)
+            )
         ):
             modifier = value
             operator = None
@@ -267,7 +271,7 @@ def validate_attributes(
     field_cache: dict,
     is_field: bool = False,
 ) -> list[dict] | None:
-    """Validate a list of attribute filters for GoaT query.
+    f"""Validate a list of attribute filters for {DATASTORE_NAME} query.
 
     Special validation: Detects if same attribute appears multiple times with
     summary modifiers (min/max) on one and status modifiers (direct/ancestral)
@@ -359,7 +363,7 @@ def validate_attribute_names(
     search_index: str,
     field_cache: dict,
 ) -> list[str] | None:
-    """Validate a list of attribute names for GoaT query."""
+    f"""Validate a list of attribute names for {DATASTORE_NAME} query."""
     if not names:
         return None
     validated_names = []

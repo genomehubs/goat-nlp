@@ -1,5 +1,5 @@
-# MCP Server for GoaT
+# MCP Server for GenomeHubs
 
-from .goat import main
+from .server import main
 
 __all__ = ["main"]

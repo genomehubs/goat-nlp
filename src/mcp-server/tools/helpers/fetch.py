@@ -1,17 +1,18 @@
-"""Constants for GoaT MCP server."""
+"""Constants for GenomeHubs MCP server."""
 
 import time
 from typing import Any
 
+from ...config import API_BASE, DATASTORE_NAME
 from . import constants
-from .api import make_goat_request
+from .api import make_api_request
 
 _FIELD_CACHE_TIMESTAMP: dict[str, float] = {}
 _FIELD_CACHE_TTL_SECONDS = 24 * 60 * 60  # 24 hours
 
 
 async def fetch_valid_types(search_index: str = "taxon") -> dict[str, Any]:
-    """Internal function to fetch valid attribute types from GoaT API.
+    f"""Internal function to fetch valid attribute types from {DATASTORE_NAME} API.
 
     Uses in-memory cache with 24-hour TTL to avoid repeated API calls.
 
@@ -27,8 +28,8 @@ async def fetch_valid_types(search_index: str = "taxon") -> dict[str, Any]:
             return constants.FIELD_CACHE[search_index]
 
     # Cache miss or expired - fetch from API
-    url = f"{constants.GOAT_API_BASE}/resultFields?result={search_index}"
-    data = await make_goat_request(url)
+    url = f"{API_BASE}/resultFields?result={search_index}"
+    data = await make_api_request(url)
     if not data or "fields" not in data:
         return {}
 

@@ -1,7 +1,7 @@
-"""Formatting utilities for GoaT MCP server."""
+"""Formatting utilities for GenomeHubs MCP server."""
 
+from ...config import DATASTORE_FULL_DESCRIPTION, DATASTORE_NAME
 from ...logging_config import get_logger
-from .constants import GOAT_DESCRIPTION
 
 logger = get_logger(__name__)
 
@@ -22,7 +22,7 @@ def rank_description(rank: str) -> str:
 
 
 def format_count(result: dict, taxa: list[str] | None = None, rank: str = "", url: str = "") -> str:
-    """Format count into a readable string with GoaT context."""
+    f"""Format count into a readable string with {DATASTORE_NAME} context."""
     count = result.get("count", 0)
 
     search_url = url.replace("/api/v2", "")
@@ -30,13 +30,13 @@ def format_count(result: dict, taxa: list[str] | None = None, rank: str = "", ur
         search_url.replace("count?", "search?") + "&size=10&report=sources"
     )
     return f"""
-According to {GOAT_DESCRIPTION}, there are {count} {rank_description(rank)} \
+According to {DATASTORE_FULL_DESCRIPTION}, there are {count} {rank_description(rank)} \
 within {', '.join(taxa) if taxa else "all taxa"}.
 
 This count is based on taxa with sequence data from the NCBI taxonomy,
-supplemented by additional metadata from the GoaT database.
+supplemented by additional metadata from the {DATASTORE_NAME} database.
 
-Explore these results in the GOAT web interface:
+Explore these results in the {DATASTORE_NAME} web interface:
 {search_url}
 """
 
@@ -81,14 +81,14 @@ def format_attribute_value(name: str, attribute: dict, truncate: bool = True) ->
 
 
 def format_record(record: dict, url: str, attributes: list[str] | None = None, truncate: bool = True) -> str:
-    """Format a GoaT record into a readable string."""
+    f"""Format a {DATASTORE_NAME} record into a readable string."""
     lineage_str = format_lineage(record.get("lineage", []))
 
     lines = [
         f"Scientific Name: {record.get('scientific_name', 'Unknown')}",
         f"Taxon ID: {record.get('taxon_id', 'Unknown')}",
         f"Rank: {record.get('taxon_rank', 'Unknown')}",
-        f"GoaT URL: {url.replace('/api/v2', '')}",
+        f"{DATASTORE_NAME} URL: {url.replace('/api/v2', '')}",
         f"Lineage: {lineage_str}"
     ]
 
@@ -105,20 +105,20 @@ def format_result_table(
     search_ranks: list[str],
     search_url: str,
 ) -> str:
-    """Format search results as a markdown table with context.
+    f"""Format search results as a markdown table with context.
 
     Args:
         results: List of result records
         search_fields: List of fields to include in the table
         search_names: List of taxon name classes to include
         search_ranks: List of taxonomic ranks to include
-        search_url: GoaT web interface URL
+        search_url: {DATASTORE_NAME} web interface URL
 
     Returns:
         Formatted markdown string with summary and table
     """
     if not results:
-        return f"No results found.\n\nExplore in GoaT: {search_url}"
+        return f"No results found.\n\nExplore in {DATASTORE_NAME}: {search_url}"
 
     columns = []
 
@@ -210,11 +210,11 @@ def format_result_table(
 """
 
 
-def format_sources_report(report_data: dict, goat_url: str) -> str:
-    """Format a sources report for LLM interpretation and user presentation.
+def format_sources_report(report_data: dict, search_url: str) -> str:
+    f"""Format a sources report for LLM interpretation and user presentation.
 
     Args:
-        report_data: The sources report from GoaT API
+        report_data: The sources report from {DATASTORE_NAME} API
 
     Returns:
         Formatted markdown string with source attribution
@@ -253,14 +253,14 @@ def format_sources_report(report_data: dict, goat_url: str) -> str:
     result = "\n".join(lines)
     return f"""{result}
 
-GoaT URL: {goat_url}"""
+{DATASTORE_NAME} URL: {search_url}"""
 
 
 def format_histogram_report(report_data: dict, url: str, logger_instance=None) -> str:
-    """Format a histogram report for LLM interpretation and user presentation.
+    f"""Format a histogram report for LLM interpretation and user presentation.
 
     Args:
-        report_data: The histogram report from GoaT API
+        report_data: The histogram report from {DATASTORE_NAME} API
         logger_instance: Optional logger instance for debugging
 
     Returns:
@@ -330,7 +330,7 @@ def format_histogram_report(report_data: dict, url: str, logger_instance=None) -
     result = "\n".join(lines)
     return f"""{result}
 
-GoaT URL: {url}"""
+{DATASTORE_NAME} URL: {url}"""
 
 
 def format_stats_and_buckets(stats, lines, buckets, counts):

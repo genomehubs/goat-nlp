@@ -2,7 +2,7 @@
 
 ## Overview
 
-The `record` intent is used to fetch detailed information about a single record from any of the three GoaT indices.
+The `record` intent is used to fetch detailed information about a single record from any of the search indices.
 
 ## Intent Patterns
 
@@ -95,12 +95,10 @@ If unsure, `choose_search_index` on the full query string helps determine the ty
 ## Backend Implementation Notes
 
 1. **Taxon ID Resolution**
-
    - If user provides scientific name → use `check_taxon_exists` to resolve to taxon ID
    - If user provides taxon ID → use directly
 
 2. **Record Retrieval**
-
    - Call `get_record(record_id=taxon, search_index=search_index, attributes=...)`
    - `attributes` parameter for selecting specific fields to include
 

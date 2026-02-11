@@ -1,6 +1,7 @@
+from ..config import API_BASE, DATASTORE_NAME
 from ..logging_config import get_logger
-from .helpers.api import make_goat_request
-from .helpers.constants import FIELD_CACHE, GOAT_API_BASE
+from .helpers.api import make_api_request
+from .helpers.constants import FIELD_CACHE
 from .helpers.fetch import fetch_valid_types
 from .helpers.formatting import format_result_table, rank_description
 from .helpers.query import build_query_string, process_modifiers, set_exclusions
@@ -12,7 +13,7 @@ from .helpers.validation import (  # validate_attribute_names,
 logger = get_logger(__name__)
 
 
-async def goat_advanced_search(
+async def advanced_search(
     search_index: str = "taxon",
     taxa: list[str] | None = None,
     taxon_filter_type: str = "children",
@@ -30,7 +31,7 @@ async def goat_advanced_search(
     page: int = 1,
     user_query: str | None = None,
 ) -> str:
-    """Advanced search for GoaT
+    f"""Advanced search tool for querying {DATASTORE_NAME} with complex parameters.
 
     Args:
         search_index: Index to search (taxon, assembly, or sample).
@@ -59,11 +60,11 @@ async def goat_advanced_search(
         return """Error: The 'user_query' parameter is required but was not provided.
 
 CRITICAL: You MUST always include the original user question in the user_query parameter
-when calling search_goat. This allows automatic extraction of taxonomic rank and other
+when calling submit_query. This allows automatic extraction of taxonomic rank and other
 parameters from the natural language query.
 
 Example:
-search_goat(
+submit_query(
     search_index="taxon",
     taxon="Mammalia",
     user_query="How many mammal species have genome size data"
@@ -100,7 +101,7 @@ Please retry the call with the user_query parameter included."""
     # Warn if rank might be missing for taxon queries
     if search_index == "taxon" and rank is None and (taxa is not None or attributes is not None):
         logger.warning(
-            "IMPORTANT: search_goat called with search_index='taxon' but no rank parameter. "
+            "IMPORTANT: submit_query called with search_index='taxon' but no rank parameter. "
             "If the user query mentions a taxonomic rank (species, genus, family, order, etc.), "
             "the rank parameter should be provided. Example: rank='species' for queries about species."
         )
@@ -119,7 +120,7 @@ Please retry the call with the user_query parameter included."""
         logger.error(f"Attribute validation error: {ve}")
         return f"""Error in attribute validation: {str(ve)}
 
-Please check attribute names, operators, and values against GoaT metadata
+Please check attribute names, operators, and values against {DATASTORE_NAME} metadata
 using the get_attribute_selection_context or get_valid_types tools.
 """
 
@@ -165,13 +166,13 @@ using the get_attribute_selection_context or get_valid_types tools.
 
     if query_string:
         url = (
-            f"{GOAT_API_BASE}/{endpoint}?query={query_string}"
+            f"{API_BASE}/{endpoint}?query={query_string}"
             f"&result={search_index}"
             f"{exclusions}"
         )
     else:
         # Empty query - count/show all records in index
-        url = f"{GOAT_API_BASE}/{endpoint}?result={search_index}"
+        url = f"{API_BASE}/{endpoint}?result={search_index}"
     if size is not None:
         url += f"&size={size}&offset={(page - 1) * size}"
     url += "&includeEstimates=true&taxonomy=ncbi&report=sources"
@@ -198,7 +199,7 @@ using the get_attribute_selection_context or get_valid_types tools.
     if ranks:
         url += "&ranks=" + "%2C".join(ranks)
 
-    data = await make_goat_request(url)
+    data = await make_api_request(url)
 
     # Format response based on what was queried
     if show_table:
@@ -238,10 +239,10 @@ using the get_attribute_selection_context or get_valid_types tools.
         )
 
     result = f"""
-According to GoaT, there are {description}.
+According to {DATASTORE_NAME}, there are {description}.
 
 This count is based on data from the NCBI taxonomy,
-supplemented by additional metadata from the GoaT database.
+supplemented by additional metadata from the {DATASTORE_NAME} database.
 """
 
     if show_table:
@@ -254,7 +255,7 @@ This table shows the top {size} results.
 
     result += f"""
 
-Explore these results in the GOAT web interface:
+Explore these results in the {DATASTORE_NAME} web interface:
 {search_url}
 """
 
@@ -262,9 +263,9 @@ Explore these results in the GOAT web interface:
 
 
 def register_tools(mcp) -> None:
-    """Register GoaT search tools with the FastMCP instance.
+    """Register search tools with the FastMCP instance.
 
     Args:
         mcp: FastMCP instance to register tools with
     """
-    mcp.tool()(goat_advanced_search)
+    mcp.tool()(advanced_search)

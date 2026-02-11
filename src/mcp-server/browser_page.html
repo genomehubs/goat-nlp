@@ -120,7 +120,7 @@
 
         <div class="section">
             <h2>Available Tools</h2>
-            <p>This MCP server provides tools for querying GoaT:</p>
+            <p>This MCP server provides tools for querying {{ datastore_name }}:</p>
             <ul>
                 {% for tool in tools %}
                 <li><code>{{ tool.name }}</code> - {{ tool.description }}</li>

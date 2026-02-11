@@ -1,12 +1,9 @@
-GOAT_DESCRIPTION = (
-    "GoaT (Genomes on a Tree): a searchable datastore of "
-    "genomic and sequencing project metadata"
-)
+from .config import DATASTORE_FULL_DESCRIPTION, SITE_NAME
 
 
-async def get_goat_description() -> str:
-    """Get a description of the GoaT API."""
-    return GOAT_DESCRIPTION
+async def get_datastore_description() -> str:
+    """Get a description of the datastore."""
+    return DATASTORE_FULL_DESCRIPTION
 
 
 async def get_example_queries_resource() -> str:
@@ -42,11 +39,11 @@ async def get_example_queries_resource() -> str:
 
 
 def register_resources(mcp) -> None:
-    """Register GoaT resources with the FastMCP instance.
+    """Register resources with the FastMCP instance.
 
     Args:
         mcp: FastMCP instance to register resources with
     """
 
-    mcp.resource("resource://goat/description")(get_goat_description)
-    mcp.resource("resource://goat/example-queries")(get_example_queries_resource)
+    mcp.resource(f"resource://{SITE_NAME}/description")(get_datastore_description)
+    mcp.resource(f"resource://{SITE_NAME}/example-queries")(get_example_queries_resource)

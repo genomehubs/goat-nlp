@@ -2,18 +2,21 @@
 
 from typing import Any
 
+from ..config import DATASTORE_NAME
 from ..logging_config import get_logger
 from .artifact_store import store
 from .helpers.validation import hash_dict
 
 logger = get_logger(__name__)
 
-PROCESS_IDENTIFIERS_PROMPT = """Process and validate identifier-related query parameters for GoaT API queries.
+PROCESS_IDENTIFIERS_PROMPT = (
+    f"""Process and validate identifier-related query parameters for """
+    f"""{DATASTORE_NAME} API queries.
 
 Follow the procedure below to extract and format the identifiers correctly. Ignore any other information, this
 will be handled in a subsequent step.
 
-If successful, this tool returns an artifact token that can be passed to goat_query().
+If successful, this tool returns an artifact token that can be passed to submit_query().
 
 IMPORTANT: values passed to taxa MUST be valid SCIENTIFIC NAMES or IDs.
 You can check taxon names using check_taxon_exists() if needed.
@@ -69,7 +72,7 @@ process_identifiers(
 )
 
 DO NOT CALL unless you've completed all 4 steps above!
-"""
+""")
 
 
 async def process_identifiers(
@@ -81,7 +84,7 @@ async def process_identifiers(
     taxon_filter_type: str = "children",
     search_index: str = "taxon",
 ) -> dict[str, Any]:
-    """Process and validate identifier-related query parameters.
+    f"""Process and validate identifier-related query parameters.
 
     Args:
         user_query: The original user question
@@ -94,7 +97,7 @@ async def process_identifiers(
         search_index: The search index to use ("taxon", "assembly", or "sample")
 
     Returns:
-        A dictionary with processed identifiers for GoaT API queries.
+        A dictionary with processed identifiers for {DATASTORE_NAME} API queries.
 """
     if taxa is None:
         taxa = []

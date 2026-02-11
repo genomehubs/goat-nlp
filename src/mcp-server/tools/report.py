@@ -1,5 +1,6 @@
+from ..config import DATASTORE_NAME
 from ..logging_config import get_logger
-from .helpers.api import make_goat_request
+from .helpers.api import make_api_request
 from .helpers.constants import FIELD_CACHE
 from .helpers.fetch import fetch_valid_types
 from .helpers.formatting import format_histogram_report, format_sources_report
@@ -10,17 +11,17 @@ from .utilities import fetch_valid_ranks
 logger = get_logger(__name__)
 
 
-async def get_goat_report(
+async def get_report(
     search_url: str,
     report_type: str = "sources",
     rank: str | None = None,
     x_field: str | None = None,
     y_field: str | None = None,
 ) -> str:
-    """Get a detailed report from GoaT based on a search URL.
+    f"""Get a detailed report from {DATASTORE_NAME} based on a search URL.
 
-    This tool generates various types of analytical reports from a GoaT search.
-    It works with the search_url returned from a previous search_goat call.
+    This tool generates various types of analytical reports from a {DATASTORE_NAME} search.
+    It works with the search_url returned from a previous submit_query call.
 
     IMPORTANT FOR HISTOGRAMS: To generate a histogram for a specific attribute,
     use the x_field parameter to specify which attribute to plot. The LLM can
@@ -28,11 +29,11 @@ async def get_goat_report(
     in the original search query.
 
     Example workflow for "chromosome number distribution for flowering plants":
-    1. Call search_goat(taxa=["Angiospermae"], rank="species") to get search_url
-    2. Call get_goat_report(search_url=<url>, report_type="histogram",
+    1. Call submit_query(taxa=["Angiospermae"], rank="species") to get search_url
+    2. Call get_report(search_url=<url>, report_type="histogram",
                            rank="species", x_field="chromosome_number")
 
-    The x_field parameter tells GoaT which attribute to use for the histogram,
+    The x_field parameter tells {DATASTORE_NAME} which attribute to use for the histogram,
     this should be part of the original search the original search.
 
     Report types include:
@@ -42,8 +43,8 @@ async def get_goat_report(
     - tree: Taxonomic tree representation
 
     Args:
-        search_url: Full GoaT search URL from a previous search_goat call.
-                    CRITICAL: this must be the exact URL returned by search_goat,
+        search_url: Full {DATASTORE_NAME} search URL from a previous submit_query call.
+                    CRITICAL: this must be the exact URL returned by submit_query,
                     without any manual modifications.
         report_type: Type of report to generate (default: sources)
         rank: Taxonomic rank filter (REQUIRED for histogram/scatter on taxon index)
@@ -51,7 +52,7 @@ async def get_goat_report(
                  (e.g., "chromosome_number", "assembly_span", "genome_size")
         y_field: Attribute name for scatter plot y-axis
     """
-    logger.info(f"get_goat_report called: search_url={search_url}, report_type={report_type}, "
+    logger.info(f"get_report called: search_url={search_url}, report_type={report_type}, "
                 f"rank={rank}, x_field={x_field}, y_field={y_field}")
 
     # Validate and normalize URL encoding
@@ -96,7 +97,7 @@ async def get_goat_report(
             )
         valid_ranks = await fetch_valid_ranks()
         if rank not in valid_ranks:
-            return (f"Error: Invalid rank '{rank}' provided for GoaT taxa reports."
+            return (f"Error: Invalid rank '{rank}' provided for {DATASTORE_NAME} taxa reports."
                     f" Valid ranks are: {', '.join(valid_ranks)}.")
 
         url = update_query_string(url, "rank", rank)
@@ -120,7 +121,7 @@ async def get_goat_report(
 
     url = url.replace("query=", "x=")
 
-    data = await make_goat_request(url)
+    data = await make_api_request(url)
     if not data or "report" not in data:
         return f"Unable to fetch report or no report found for URL: {url}."
 
@@ -130,7 +131,7 @@ async def get_goat_report(
     if report_type == "histogram":
         return format_histogram_report(data, url)
 
-    return f"""GoaT Report ({report_type}):
+    return f"""{DATASTORE_NAME} Report ({report_type}):
 
 {data['report']}
 
@@ -138,9 +139,9 @@ URL: {url}"""
 
 
 def register_tools(mcp) -> None:
-    """Register GoaT report tools with the FastMCP instance.
+    """Register report tools with the FastMCP instance.
 
     Args:
         mcp: FastMCP instance to register tools with
     """
-    mcp.tool()(get_goat_report)
+    mcp.tool()(get_report)

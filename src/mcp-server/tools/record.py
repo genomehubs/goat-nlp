@@ -1,8 +1,9 @@
 from typing import Any
 
+from ..config import API_BASE, DATASTORE_NAME
 from ..logging_config import get_logger
-from .helpers.api import make_goat_request
-from .helpers.constants import FIELD_CACHE, GOAT_API_BASE
+from .helpers.api import make_api_request
+from .helpers.constants import FIELD_CACHE
 from .helpers.fetch import fetch_valid_types
 from .helpers.formatting import format_record
 from .helpers.validation import validate_attribute_names
@@ -10,23 +11,23 @@ from .helpers.validation import validate_attribute_names
 logger = get_logger(__name__)
 
 
-async def get_goat_record(
+async def get_record(
     record_id: str,
     search_index: str,
     attributes: list[str] | None = None,
     truncate: bool = True,
 ) -> Any:
-    """Get a single record from GoaT.
+    f"""Get a single record from {DATASTORE_NAME}.
 
      ⚠️ RECOMMENDATION: IF the user query involves multiple records or complex
-     filters, Use goat_query instead to retrieve a table for 95% of queries!
+     filters, Use submit_query instead to retrieve a table for 95% of queries!
 
     An LLM can use this to fetch detailed information about a specific record.
     the record ID can be a taxon ID, assembly accession, or sample ID depending
     on the search_index.
 
-    Use this tool after identifying a specific record of interest from a search_goat
-    query, or when a use explicitly requests information about a known record.
+    Use this tool after identifying a specific record of interest from a submit_query
+    search, or when a use explicitly requests information about a known record.
 
     Example user queries that would use this tool:
     - "Give me details about the taxon with ID 1234."
@@ -47,7 +48,7 @@ async def get_goat_record(
     - Lineage
     - Requested attributes and their values
 
-    When summarizing a record, the LLM MUST include the GoaT web interface URL.
+    When summarizing a record, the LLM MUST include the {DATASTORE_NAME} web interface URL.
 
     Args:
         record_id: ID of the record to fetch
@@ -64,14 +65,14 @@ async def get_goat_record(
     except ValueError as ve:
         return f"""Error in attribute validation: {str(ve)}
 
-Please check attribute names against GoaT metadata using the
+Please check attribute names against {DATASTORE_NAME} metadata using the
 get_attribute_selection_context or get_valid_types tools.
 """
     url = (
-        f"{GOAT_API_BASE}/record?result={search_index}"
+        f"{API_BASE}/record?result={search_index}"
         f"&recordId={record_id}&taxonomy=ncbi"
     )
-    data = await make_goat_request(url)
+    data = await make_api_request(url)
     if not data or "records" not in data:
         return {"error": "Unable to fetch record or no record found."}
 
@@ -79,9 +80,9 @@ get_attribute_selection_context or get_valid_types tools.
 
 
 def register_tools(mcp) -> None:
-    """Register GoaT record tools with the FastMCP instance.
+    f"""Register {DATASTORE_NAME} record tools with the FastMCP instance.
 
     Args:
         mcp: FastMCP instance to register tools with
     """
-    mcp.tool()(get_goat_record)
+    mcp.tool()(get_record)

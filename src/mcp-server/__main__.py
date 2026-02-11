@@ -5,7 +5,7 @@ Usage:
     python -m mcp_server
 """
 
-from .goat import main
+from .server import main
 
 if __name__ == "__main__":
     main()
