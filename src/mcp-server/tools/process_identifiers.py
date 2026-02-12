@@ -4,8 +4,8 @@ from typing import Any
 
 from ..config import DATASTORE_NAME
 from ..logging_config import get_logger
-from .artifact_store import store
-from .helpers.validation import hash_dict
+from .helpers.normalisation import normalise_to_list
+from .helpers.processor_common import finalise_and_store
 
 logger = get_logger(__name__)
 
@@ -99,19 +99,13 @@ async def process_identifiers(
     Returns:
         A dictionary with processed identifiers for {DATASTORE_NAME} API queries.
 """
-    if taxa is None:
-        taxa = []
-    elif isinstance(taxa, str):
-        taxa = [taxa]
+    # Normalise all inputs to lists
+    taxa = normalise_to_list(taxa)
+    assemblies = normalise_to_list(assemblies)
+    samples = normalise_to_list(samples)
+
+    # Clean and encode taxa (handle exclamation marks for NOT filters)
     taxa = [t.strip().replace("!", "%21") for t in taxa if t.strip() != ""]
-    if assemblies is None:
-        assemblies = []
-    elif isinstance(assemblies, str):
-        assemblies = [assemblies]
-    if samples is None:
-        samples = []
-    elif isinstance(samples, str):
-        samples = [samples]
 
     result: dict[str, Any] = {
         "taxa": taxa,
@@ -122,13 +116,7 @@ async def process_identifiers(
         "user_query": user_query,
     }
 
-    dict_hash = hash_dict(result)
-
-    result["unique_id"] = dict_hash
-
-    # Store canonical result and return an artifact token
-    token = store(result)
-    return {"artifact_id": token}
+    return finalise_and_store(result)
 
 
 process_identifiers.__doc__ = PROCESS_IDENTIFIERS_PROMPT
@@ -141,3 +129,103 @@ def register_tools(mcp) -> None:
         mcp: FastMCP instance to register tools with
     """
     mcp.tool()(process_identifiers)
+
+
+if __name__ == "__main__":
+    import asyncio
+
+    from .artifact_store import retrieve
+
+    async def test_process_identifiers():
+        """Test examples for process_identifiers."""
+        print("=" * 60)
+        print("Testing process_identifiers")
+        print("=" * 60)
+
+        # Test 1: Basic taxa query
+        print("\n[Test 1] Basic taxa query")
+        result1 = await process_identifiers(
+            user_query="How many mammal species are there?",
+            taxa=["Mammalia"],
+            rank="species",
+            taxon_filter_type="children"
+        )
+        print(f"  Artifact ID: {result1['artifact_id']}")
+        data1 = retrieve(result1['artifact_id'])
+        print(f"  Taxa: {data1['taxa']}")
+        print(f"  Rank: {data1['rank']}")
+        print(f"  Filter type: {data1['taxon_filter_type']}")
+        print(f"  Unique ID: {data1['unique_id'][:16]}...")
+
+        # Test 2: Multiple taxa with NOT filter
+        print("\n[Test 2] Multiple taxa with NOT filter")
+        result2 = await process_identifiers(
+            user_query="Species in Mammalia excluding Felis",
+            taxa=["Mammalia", "!Felis"],
+            rank="species"
+        )
+        print(f"  Artifact ID: {result2['artifact_id']}")
+        data2 = retrieve(result2['artifact_id'])
+        print(f"  Taxa (with NOT): {data2['taxa']}")
+        print(f"  Note: '!' encoded as '%21': {data2['taxa'][1]}")
+
+        # Test 3: String normalisation (single string instead of list)
+        print("\n[Test 3] String normalisation")
+        result3 = await process_identifiers(
+            user_query="Get assembly GCF_000002305.6",
+            assemblies="GCF_000002305.6"  # String, not list
+        )
+        print(f"  Artifact ID: {result3['artifact_id']}")
+        data3 = retrieve(result3['artifact_id'])
+        print(f"  Assemblies: {data3['assemblies']}")
+        print(f"  Type: {type(data3['assemblies'])}")
+
+        # Test 4: None normalisation
+        print("\n[Test 4] None normalisation")
+        result4 = await process_identifiers(
+            user_query="Count all species",
+            rank="species"
+            # taxa, assemblies, samples all None
+        )
+        print(f"  Artifact ID: {result4['artifact_id']}")
+        data4 = retrieve(result4['artifact_id'])
+        print(f"  Taxa: {data4['taxa']} (empty list from None)")
+        print(f"  Assemblies: {data4['assemblies']}")
+        print(f"  Samples: {data4['samples']}")
+
+        # Test 5: Wildcard and lineage filter
+        print("\n[Test 5] Wildcard and lineage filter")
+        result5 = await process_identifiers(
+            user_query="Lineage of Canis*",
+            taxa="Canis*",
+            taxon_filter_type="lineage"
+        )
+        print(f"  Artifact ID: {result5['artifact_id']}")
+        data5 = retrieve(result5['artifact_id'])
+        print(f"  Taxa: {data5['taxa']}")
+        print(f"  Filter type: {data5['taxon_filter_type']}")
+
+        # Test 6: Hash consistency check
+        print("\n[Test 6] Hash consistency (same input = same hash)")
+        result6a = await process_identifiers(
+            user_query="Test",
+            taxa=["Mammalia"],
+            rank="species"
+        )
+        result6b = await process_identifiers(
+            user_query="Test",
+            taxa=["Mammalia"],
+            rank="species"
+        )
+        data6a = retrieve(result6a['artifact_id'])
+        data6b = retrieve(result6b['artifact_id'])
+        print(f"  Hash A: {data6a['unique_id'][:16]}...")
+        print(f"  Hash B: {data6b['unique_id'][:16]}...")
+        print(f"  Hashes match: {data6a['unique_id'] == data6b['unique_id']}")
+
+        print("\n" + "=" * 60)
+        print("✅ All tests completed successfully!")
+        print("=" * 60)
+
+    asyncio.run(test_process_identifiers())
+    asyncio.run(test_process_identifiers())

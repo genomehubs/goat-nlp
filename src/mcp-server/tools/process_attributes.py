@@ -4,10 +4,10 @@ from typing import Any
 
 from ..config import DATASTORE_NAME
 from ..logging_config import get_logger
-from .artifact_store import store
 from .helpers.constants import FIELD_CACHE
 from .helpers.fetch import fetch_valid_types
-from .helpers.validation import hash_dict, validate_attributes
+from .helpers.processor_common import finalise_and_store
+from .helpers.validation import validate_attributes
 from .utilities import fetch_valid_ranks
 
 logger = get_logger(__name__)
@@ -41,9 +41,9 @@ FOLLOW THESE STEPS EXACTLY:
 1. **attributes**: List of attribute filter dicts with 'name' and optional 'operator', 'value', 'modifier'
    and 'type'. DO NOT include names or ranks here.
    Examples:
-   - "genome_size < 3G" → [{"name": "genome_size", "operator": "<", "value": "3000000000"}]
+   - "genome_size < 3G" → [{{"name": "genome_size", "operator": "<", "value": "3000000000"}}]
    - With modifiers: "minimum directly measured genome_size"
-     → [{"name": "genome_size", "modifier": ["min", "direct"]}]
+     → [{{"name": "genome_size", "modifier": ["min", "direct"]}}]
 
    VALID OPERATORS:
    - Comparison: =, !=, <, <=, >, >=
@@ -51,7 +51,7 @@ FOLLOW THESE STEPS EXACTLY:
    - Existence: exists, missing (no value needed)
    - Ordered keyword attributes can be searched using <, <=, >, >= operators.
      * Example: "assembly_level is chromosomal or better" →
-       [{"name": "assembly_level", "operator": ">=", "value": "chromosome"}]
+       [{{"name": "assembly_level", "operator": ">=", "value": "chromosome"}}]
 
    VALID MODIFIERS:
    - Summary: min, max, median, mean, sum, list
@@ -69,23 +69,23 @@ FOLLOW THESE STEPS EXACTLY:
 
    LOGICAL COMBINATIONS:
    - Combine multiple attribute filters using AND logic by including multiple dicts in the list.
-     * Example: "genome_size < 3G AND assembly_level = 'complete'" →
-       [{"name": "genome_size", "operator": "<", "value": "3000000000"},
-        {"name": "assembly_level", "operator": "=", "value": "complete"}]
+     * Example: "genome_size < 3G AND assembly_level = 'complete genome'" →
+       [{{"name": "genome_size", "operator": "<", "value": "3000000000"}},
+        {{"name": "assembly_level", "operator": "=", "value": "complete genome"}}]
      * Example: "on the long_list for DTOL and CANBP" →
-         [{"name": "long_list", "operator": "=", "value": ["DTOL"]},
-          {"name": "long_list", "operator": "=", "value": ["CANBP"]}]
+         [{{"name": "long_list", "operator": "=", "value": ["DTOL"]}},
+          {{"name": "long_list", "operator": "=", "value": ["CANBP"]}}]
    - For OR logic, pass a list of values.
-     * example: "assembly_level in ('complete', 'chromosome')" →
-       [{"name": "assembly_level", "operator": "in", "value": ["complete","chromosome"]}]
+     * example: "assembly_level in ('complete genome', 'chromosome')" →
+       [{{"name": "assembly_level", "operator": "in", "value": ["complete genome","chromosome"]}}]
 
 2. **fields**:
    Attribute names that should be returned as columns. If a field used for filtering is also required as a field,
    include it in both lists:
    Examples:
-   - "Show genome_size and assembly_level" → [{"name": "genome_size"}, {"name": "assembly_level"}]
-   - "Give me minimum genome_size and directly measured assembly_level" → [{"name": "genome_size", "modifier":
-     ["min"]}, {"name": "assembly_level", "modifier": ["direct"]}]
+   - "Show genome_size and assembly_level" → [{{"name": "genome_size"}}, {{"name": "assembly_level"}}]
+   - "Give me minimum genome_size and directly measured assembly_level" → [{{"name": "genome_size", "modifier":
+     ["min"]}}, {{"name": "assembly_level", "modifier": ["direct"]}}]
 
 3. **names**: Taxon name classes to include in the response.
    Can contain values from: scientific_name, common_name, synonym, tolid_prefix, authority.
@@ -112,7 +112,9 @@ FOLLOW THESE STEPS EXACTLY:
 EXAMPLE:
 Query: "How many mammal species have minimum directly measured genome size < 3G?"
 
-Step 1: Attributes → [{"name": "genome_size", "operator": "<", "value": "3000000000", "modifier": ["min", "direct"]}]
+Step 1: Attributes → [
+    {{"name": "genome_size", "operator": "<", "value": "3000000000",
+      "modifier": ["min", "direct"]}}]
 Step 2: Fields → []
 Step 3: Names → []
 Step 4: Ranks → []
@@ -120,7 +122,7 @@ Step 5: user_query → Copy exactly
 
 THEN CALL:
 process_attributes(
-    attributes=[{"name": "genome_size", "operator": "<", "value": "3000000000", "modifier": ["min", "direct"]}],
+    attributes=[{{"name": "genome_size", "operator": "<", "value": "3000000000", "modifier": ["min", "direct"]}}],
     fields=[],
     names=[],
     ranks=[],
@@ -267,13 +269,7 @@ You can check valid attribute names using get_attribute_selection_context()."""
         "ranks": ranks or [],
     }
 
-    dict_hash = hash_dict(result)
-
-    result["unique_id"] = dict_hash
-
-    # Store canonical result and return an artifact token
-    token = store(result)
-    return {"artifact_id": token}
+    return finalise_and_store(result)
 
 
 process_attributes.__doc__ = PROCESS_ATTRIBUTES_PROMPT
@@ -285,3 +281,130 @@ def register_tools(mcp) -> None:
         mcp: FastMCP instance to register tools with
     """
     mcp.tool()(process_attributes)
+
+
+if __name__ == "__main__":
+    import asyncio
+
+    from .artifact_store import retrieve
+
+    async def test_process_attributes():
+        """Test examples for process_attributes."""
+        print("=" * 60)
+        print("Testing process_attributes")
+        print("=" * 60)
+
+        # Test 1: Basic attribute filter
+        print("\n[Test 1] Basic attribute filter")
+        result1 = await process_attributes(
+            user_query="Species with genome_size < 3000000000",
+            attributes=[{"name": "genome_size", "operator": "<", "value": "3000000000"}],
+            fields=[]
+        )
+        print(f"  Artifact ID: {result1['artifact_id']}")
+        data1 = retrieve(result1['artifact_id'])
+        print(f"  Attributes: {data1['attributes']}")
+        print(f"  Fields: {data1['fields']}")
+
+        # Test 2: Attributes with modifiers
+        print("\n[Test 2] Attributes with modifiers")
+        result2 = await process_attributes(
+            user_query="Show minimum directly measured genome_size",
+            attributes=[{"name": "genome_size", "modifier": ["min", "direct"]}],
+            fields=[{"name": "genome_size", "modifier": ["min", "direct"]}]
+        )
+        print(f"  Artifact ID: {result2['artifact_id']}")
+        data2 = retrieve(result2['artifact_id'])
+        print(f"  Attributes: {data2['attributes']}")
+        print(f"  Fields (merged): {data2['fields']}")
+
+        # Test 3: Multiple attributes (AND logic)
+        print("\n[Test 3] Multiple attributes (AND logic)")
+        result3 = await process_attributes(
+            user_query="genome_size < 3G AND assembly_level = complete genome",
+            attributes=[
+                {"name": "genome_size", "operator": "<", "value": "3000000000"},
+                {"name": "assembly_level", "operator": "=", "value": "complete genome"}
+            ],
+            fields=[]
+        )
+        print(f"  Artifact ID: {result3['artifact_id']}")
+        data3 = retrieve(result3['artifact_id'])
+        print(f"  Attributes (AND): {data3['attributes']}")
+
+        # Test 4: Names and ranks
+        print("\n[Test 4] Names and ranks")
+        result4 = await process_attributes(
+            user_query="Show scientific_name and common_name for genus and family",
+            attributes=[],
+            fields=[],
+            names=["scientific_name", "common_name"],
+            ranks=["genus", "family"]
+        )
+        print(f"  Artifact ID: {result4['artifact_id']}")
+        data4 = retrieve(result4['artifact_id'])
+        print(f"  Names: {data4['names']}")
+        print(f"  Ranks: {data4['ranks']}")
+
+        # Test 5: Name with filter pattern
+        print("\n[Test 5] Name with filter pattern")
+        result5 = await process_attributes(
+            user_query="common_name contains 'bat'",
+            attributes=[{"name": "common_name", "value": "*bat*"}],
+            fields=[]
+        )
+        print(f"  Artifact ID: {result5['artifact_id']}")
+        data5 = retrieve(result5['artifact_id'])
+        print(f"  Names: {data5['names']}")
+        print(f"  Attributes: {data5['attributes']}")
+
+        # Test 6: Field deduplication
+        print("\n[Test 6] Field deduplication and merging")
+        result6 = await process_attributes(
+            user_query="Test field merging",
+            attributes=[
+                {"name": "genome_size", "modifier": ["min"]},
+                {"name": "genome_size", "modifier": ["max"]}
+            ],
+            fields=[{"name": "genome_size", "modifier": ["median"]}]
+        )
+        print(f"  Artifact ID: {result6['artifact_id']}")
+        data6 = retrieve(result6['artifact_id'])
+        print(f"  Fields (merged modifiers): {data6['fields']}")
+        print("  Expected: min, max, median all in one field")
+
+        # Test 7: Existence check
+        print("\n[Test 7] Existence check")
+        result7 = await process_attributes(
+            user_query="Records that have genome_size",
+            attributes=[{"name": "genome_size", "operator": "exists"}],
+            fields=[]
+        )
+        print(f"  Artifact ID: {result7['artifact_id']}")
+        data7 = retrieve(result7['artifact_id'])
+        print(f"  Attributes: {data7['attributes']}")
+
+        # Test 8: Hash consistency
+        print("\n[Test 8] Hash consistency")
+        result8a = await process_attributes(
+            user_query="Test",
+            attributes=[{"name": "genome_size", "operator": "<", "value": "1000"}],
+            fields=[]
+        )
+        result8b = await process_attributes(
+            user_query="Test",
+            attributes=[{"name": "genome_size", "operator": "<", "value": "1000"}],
+            fields=[]
+        )
+        data8a = retrieve(result8a['artifact_id'])
+        data8b = retrieve(result8b['artifact_id'])
+        print(f"  Hash A: {data8a['unique_id'][:16]}...")
+        print(f"  Hash B: {data8b['unique_id'][:16]}...")
+        print(f"  Hashes match: {data8a['unique_id'] == data8b['unique_id']}")
+
+        print("\n" + "=" * 60)
+        print("✅ All tests completed successfully!")
+        print("=" * 60)
+
+    asyncio.run(test_process_attributes())
+    asyncio.run(test_process_attributes())
