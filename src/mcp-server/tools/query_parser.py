@@ -13,7 +13,7 @@ from .helpers.validation import validate_attribute_name
 logger = get_logger(__name__)
 
 
-PROCESS_ATTRIBUTES_PROMPT = f"""Parse query parameters to form a {DATASTORE_NAME} URL, optionally
+SUBMIT_QUERY_PROMPT = f"""Parse query parameters to form a {DATASTORE_NAME} URL, optionally
 return a count and table.
 
 CRITICAL: ONLY RUN THIS TOOL AFTER PROCESSING IDENTIFIERS WITH process_identifiers()
@@ -65,39 +65,6 @@ submit_query(
 
 """
 
-EXTRA_DETAILS_PROMPT = """FOLLOW THESE STEPS EXACTLY:
-If intent is table, ALSO PROCESS:
-4. **sort_by**: Attribute name to sort results by, with optional modifier
-
-5. **sort_order**: Sort order - "asc" or "desc"
-
-6. **size**: Result size limit (default 10 for tables, None for counts)
-
-7. **page**: Page number for pagination (default 1)
-
-REMEMBER: ALWAYS PASS THE ORIGINAL IDENTIFIERS OUTPUT AS INPUT TO THIS TOOL!
-
-8. **identifiers_output**: Pass in the identifiers output data structure EXACTLY. DO NOT MODIFY IT.
-
-
-EXAMPLE:
-Query: "How many mammal species have minimum directly measured genome size < 3G?"
-
-Step 1: Attributes → [{"name": "genome_size", "operator": "<", "value": "3000000000", "modifier": ["min", "direct"]}]
-Step 2: Fields → []
-Step 3: Intent → "How many" = "count"
-
-THEN CALL:
-process_attributes(
-    attributes=[{"name": "genome_size", "operator": "<", "value": "3000000000", "modifier": ["min", "direct"]}],
-    fields=[],
-    intent="count",
-    identifiers_output=IDENTIFIERS_OUTPUT
-)
-
-DO NOT CALL unless you've completed all 8 steps above!
-"""
-
 
 async def submit_query(
     identifiers_artifact_id: str,
@@ -122,7 +89,7 @@ async def submit_query(
         page: Optional page number for pagination (default 1)
 
     Returns:
-        dict with URL, count and result table (if requested)
+        dict with artifact_id, URL, count and result table (if requested)
     """
 
     # If artifact tokens were provided (string), attempt to retrieve stored objects
@@ -224,7 +191,7 @@ async def submit_query(
 
 
 # Set the runtime docstring / tool description to the selected LLM prompt.
-submit_query.__doc__ = PROCESS_ATTRIBUTES_PROMPT
+submit_query.__doc__ = SUBMIT_QUERY_PROMPT
 
 
 def register_tools(mcp) -> None:
