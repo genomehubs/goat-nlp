@@ -157,7 +157,7 @@ def main():
 
     # Run the wrapped app
     import uvicorn
-    uvicorn.run(wrapped_app, host="127.0.0.1", port=8008)
+    uvicorn.run(wrapped_app, host="0.0.0.0", port=8008)
 
 
 if __name__ == "__main__":
