@@ -54,20 +54,17 @@ Try a query:
 report based queries - not currently available
 
 - get me a histogram of assembly_span values across all species
-
   - give me the version with estimated values as well
 
 other test queries
 
 - how many ungulates, spiders and lizards have directly measured genome sizes over 1G and less than 2.5G with a chromosome number over 10, excluding snakes
-
   - can I have a table of the largest 5 genome sizes in that list
   - can you include a list of projects targeting each species in the table
   - can you filter the table to only include rows where bioproject is present
   - I mean apply that filter to the full query
 
 - give me the first 10 rows of a table of crab species targeted by any project. Include common name and family in the table
-
   - can you sort the table and give me the top 10 by largest genome size
   - can you restrict that to non-ancestral values for genome size
   - can you expand the search to all crustaceans
@@ -75,7 +72,6 @@ other test queries
 - what is the sequencing status for bat species found in the UK
 
 - which whale species are on the dtol list
-
   - are any of these also on the canbp list?
   - which of these have an assembly?
   - are these direct values?
@@ -84,7 +80,6 @@ other test queries
   - can you also add columns for common name family and haploid chromosome number
 
 - are there any crab genomes?
-
   - which of these are scaffold or worse
   - what is the status for these species in ongoing projects
   - how many projects can you show me the status in?
@@ -92,7 +87,6 @@ other test queries
     - give me the full status
 
 - can you include a list of projects targeting each species in the table
-
   - can you use genome_size_kmer field instead of genome_size
   - can you filter out missing values in the projects columns using goat rather than after the table is returned
   - can you reverse the sort order
@@ -111,3 +105,8 @@ other test queries
   - what was the lowest and highest scaffold n50 for assemblies in that period
   - what about for only project psyche
     - the project psyche bioproject is PRJEB71705
+
+- give me a histogram of chromosome counts for spiders
+  - can you remake the histogram using a log scale with country as a category showing the top ten plus other
+
+- what is the distribution of genome sizes for species on the dtol long list that have chromosomal genome assemblies?

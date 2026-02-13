@@ -104,6 +104,199 @@ def build_query_string(
     return "%20AND%20".join(query_parts) if query_parts else ""
 
 
+async def build_search_params(
+    search_index: str,
+    taxa: list[str] | None = None,
+    taxon_filter_type: str = "children",
+    assemblies: list[str] | None = None,
+    samples: list[str] | None = None,
+    rank: str | None = None,
+    attributes: list[dict] | None = None,
+    fields: list[dict] | None = None,
+    names: list[str] | None = None,
+    ranks: list[str] | None = None,
+) -> dict:
+    """Build base search params as a dict from validated parameters.
+
+    Does NOT include pagination (size/offset), sorting, or report-specific params.
+    Returns a dict that can be extended with additional params before serialisation.
+
+    Args:
+        search_index: "taxon", "assembly", or "sample"
+        taxa: List of taxon names/IDs
+        taxon_filter_type: "children", "matching", or "lineage"
+        assemblies: List of assembly accessions
+        samples: List of sample accessions
+        rank: Taxonomic rank
+        attributes: List of attribute filter dicts
+        fields: List of field dicts to return
+        names: List of taxon name classes
+        ranks: List of rank names to return
+
+    Returns:
+        Dict with keys: query_string, result, exclusions, fields, names, ranks
+        Ready for additional report params or pagination/sorting.
+    """
+    # Build base query string
+    query_string = build_query_string(taxa, rank, attributes, assemblies, samples, taxon_filter_type)
+    exclusions = set_exclusions(attributes)
+
+    # Start with core params
+    params = {
+        "result": search_index,
+        "includeEstimates": "true",
+        "taxonomy": "ncbi",
+        "report": "sources",
+    }
+
+    # Add query if present
+    if query_string:
+        params["query"] = query_string
+
+    # Add exclusions (note: exclusions are already URL-encoded in set_exclusions)
+    if exclusions:
+        params["_exclusions_raw"] = exclusions  # Mark for special handling during serialisation
+
+    # Add fields
+    if fields:
+        parsed_fields = []
+        for field in fields:
+            name = field.get("name")
+            if not name:
+                continue
+            parsed_fields.append(name)
+            if "modifier" in field:
+                parsed_fields.extend(
+                    f"{name}:{mod}"
+                    for mod in field.get("modifier", [])
+                    if mod
+                    in {
+                        "min",
+                        "max",
+                        "mean",
+                        "median",
+                        "mode",
+                        "length",
+                        "direct",
+                        "descendant",
+                        "ancestral",
+                        "missing",
+                    }
+                )
+        if parsed_fields:
+            params["fields"] = parsed_fields
+
+    # Add names
+    if names:
+        params["names"] = names
+
+    # Add ranks
+    if ranks:
+        params["ranks"] = ranks
+
+    return params
+
+
+def params_dict_to_url(base_url: str, params: dict) -> str:
+    """Convert a params dict to a URL query string.
+
+    Handles special cases like URL-encoded exclusions and list values.
+
+    Args:
+        base_url: Base URL (e.g., "https://api.genomehubs.org/v2/search")
+        params: Dict of parameters with special handling for:
+            - "_exclusions_raw": already URL-encoded exclusion string (not converted)
+            - list values: converted to comma-separated
+            - string values: URL-encoded
+
+    Returns:
+        Full URL with query string
+    """
+    query_parts = []
+
+    for key, value in params.items():
+        # Skip special internal keys
+        if key == "_exclusions_raw":
+            continue
+
+        if value is None:
+            continue
+
+        # Handle list values (fields, names, ranks)
+        if isinstance(value, list):
+            # Use safe="%" to avoid double-encoding already-encoded values
+            value_str = "%2C".join(quote(str(v), safe="%") for v in value)
+        else:
+            # Use safe="%" to avoid double-encoding already-encoded values (e.g., query strings)
+            value_str = quote(str(value), safe="%")
+
+        query_parts.append(f"{key}={value_str}")
+
+    # Add exclusions if present (already URL-encoded)
+    if "_exclusions_raw" in params:
+        if exclusions := params["_exclusions_raw"]:
+            # Remove leading "&" if present
+            exclusions = exclusions.lstrip("&")
+            query_parts.append(exclusions)
+
+    url = base_url
+    if query_parts:
+        url += "?" + "&".join(query_parts)
+
+    return url
+
+
+def build_user_facing_url(api_url: str, web_base: str = "") -> str:
+    """Convert an API URL to a user-facing web URL.
+
+    Replaces /api/v2 with web base and converts endpoint if needed.
+
+    Args:
+        api_url: API URL from search
+        web_base: Base URL for user-facing interface (default: remove /api/v2)
+
+    Returns:
+        User-facing URL
+    """
+    url = api_url.replace("/api/v2", web_base)
+
+    return url.replace("count?", "search?")
+
+
+def merge_params_dicts(base_params: dict, additional_params: dict) -> dict:
+    """Merge additional params into base params dict.
+
+    Handles:
+    - Overwriting existing keys
+    - Extending list values (for fields, names, ranks)
+    - Preserving special keys like "_exclusions_raw"
+
+    Args:
+        base_params: Base parameters dict
+        additional_params: Additional/override parameters
+
+    Returns:
+        Merged dict
+    """
+    merged = base_params.copy()
+
+    for key, value in additional_params.items():
+        if key in {"fields", "names", "ranks"}:
+            # Extend lists instead of replacing
+            if key in merged and isinstance(merged[key], list):
+                existing = merged[key]
+                new_values = value if isinstance(value, list) else [value]
+                # Add only new values not already in the list
+                merged[key] = existing + [v for v in new_values if v not in existing]
+            else:
+                merged[key] = value
+        else:
+            # Override other keys
+            merged[key] = value
+
+    return merged
+
+
 def format_attributes(attributes: list[dict]) -> str:
     f"""Format a list of attribute filters into a {DATASTORE_NAME} query string."""
     formatted_attrs = []
@@ -219,7 +412,7 @@ def process_modifiers(attributes: list[dict] | None) -> list[dict]:
             elif status_mod == "descendant":
                 attr_copy["exclude"] = ["Direct", "Ancestral", "Estimated", "Missing"]
             elif status_mod == "estimated":
-                attr_copy["exclude"] = ["Direct", "Ancestral", "Descendant"]
+                attr_copy["exclude"] = ["Direct", "Missing"]
             if "exclude" in attr_copy and not isinstance(attr_copy["exclude"], list):
                 attr_copy["exclude"] = list(attr_copy["exclude"])
 

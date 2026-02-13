@@ -1,141 +1,258 @@
-from ..config import DATASTORE_NAME
+from ..config import API_BASE, DATASTORE_NAME
 from ..logging_config import get_logger
+from .artifact_store import retrieve
 from .helpers.api import make_api_request
-from .helpers.constants import FIELD_CACHE
-from .helpers.fetch import fetch_valid_types
-from .helpers.formatting import format_histogram_report, format_sources_report
-from .helpers.urls import update_query_string
-from .helpers.validation import validate_attribute_name
-from .utilities import fetch_valid_ranks
+from .helpers.axis import axis_opts_to_string
+from .helpers.query import (
+    build_search_params,
+    build_user_facing_url,
+    params_dict_to_url,
+)
 
 logger = get_logger(__name__)
 
 
+GET_REPORT_PROMPT = f"""Generate {DATASTORE_NAME} reports with different visualisation types.
+
+CHOOSE YOUR REPORT TYPE AND PROVIDE THE REQUIRED PARAMETERS:
+
+**DISTRIBUTION REPORTS** (show data across axes):
+
+1. **histogram**: Distribution of values for one attribute
+   Required: x_axis (field/rank/attribute distribution)
+   Optional: category (group by field/rank), bin_count, scale
+   Example: "What is the distribution of genome sizes?"
+            → process_axis(axis_definition="genome_size") → get_report(intent="histogram", x_axis_artifact_id=...)
+
+2. **scatter**: Relationship between two attributes
+   Required: x_axis, y_axis (both field/rank/attribute distributions)
+   Optional: category, scale
+   Example: "How do genome size and chromosome count compare?"
+            → process_axis(x...) + process_axis(y...) → get_report(intent="scatter", x_axis=..., y_axis=...)
+
+3. **tree**: Taxonomic tree with optional data bars on leaves
+   Required: none
+   Optional: y_axis (data to show at leaves), category
+   Example: "Show the taxonomy tree for mammals with genome size data at leaves"
+            → process_axis(y...) → get_report(intent="tree", y_axis_artifact_id=...)
+
+4. **map**: Geographic distribution
+   Required: none
+   Optional: category (group by attribute/rank)
+   Example: "Where are these species found?"
+            → process_axis(category...) → get_report(intent="map", category_artifact_id=...)
+
+**COMPOSITION REPORTS** (show proportions within hierarchies):
+
+5. **donut**: What proportion of results match an additional filter?
+   Required: Required: parent_filter (the broader context to show proportions within)
+   Example: "Of the mammal species, what proportion have genome_size > 3G?"
+            → process_attributes(filter for genome_size > 3G)
+            → get_report(intent="donut", parent_filter_artifact_id=...)
+
+6. **rainbow**: What proportion at each rank match filter_y, and optionally filter_z?
+   Required: parent_filter (first level filter)
+   Example: "Of mammals with genome_size > 3G, how many per phylum and order?"
+            → process_attributes(genome_size > 3G) → process_attributes(additional...)
+            → get_report(intent="rainbow", parent_filter_artifact_id=...)
+
+7. **sources**: Data sources for this query
+   Required: none
+   Example: "Which databases contributed to these results?"
+            → get_report(intent="sources")
+"""
+
+
 async def get_report(
-    search_url: str,
-    report_type: str = "sources",
-    rank: str | None = None,
-    x_field: str | None = None,
-    y_field: str | None = None,
-) -> str:
-    f"""Get a detailed report from {DATASTORE_NAME} based on a search URL.
+    user_query: str,
+    intent: str,  # This tells us what the other params mean
+    identifiers_artifact_id: str,
+    attributes_artifact_id: str,
+    # Visualisation axes (for histogram, scatter, tree, map)
+    x_axis_artifact_id: str | None = None,  # Required: histogram, scatter
+    y_axis_artifact_id: str | None = None,  # Required: scatter; Optional: tree
+    z_axis_artifact_id: str | None = None,  # Optional: tree
+    category_artifact_id: str | None = None,  # Optional: histogram, scatter, tree, map
+    # Hierarchical filters (for donut, rainbow)
+    parent_filter_artifact_id: str | None = None,  # "broader scope for main query"
+    search_index: str = "taxon",
+) -> dict[str, str]:
+    """Generate a report with visualisation.
 
-    This tool generates various types of analytical reports from a {DATASTORE_NAME} search.
-    It works with the search_url returned from a previous submit_query call.
-
-    IMPORTANT FOR HISTOGRAMS: To generate a histogram for a specific attribute,
-    use the x_field parameter to specify which attribute to plot. The LLM can
-    choose ANY valid attribute for the search_index, even if it wasn't included
-    in the original search query.
-
-    Example workflow for "chromosome number distribution for flowering plants":
-    1. Call submit_query(taxa=["Angiospermae"], rank="species") to get search_url
-    2. Call get_report(search_url=<url>, report_type="histogram",
-                           rank="species", x_field="chromosome_number")
-
-    The x_field parameter tells {DATASTORE_NAME} which attribute to use for the histogram,
-    this should be part of the original search the original search.
-
-    Report types include:
-    - sources: List of data sources contributing to the results
-    - histogram: Distribution of values for a specific attribute (use x_field)
-    - scatter: Scatter plot comparing two attributes (use x_field and y_field)
-    - tree: Taxonomic tree representation
-
-    Args:
-        search_url: Full {DATASTORE_NAME} search URL from a previous submit_query call.
-                    CRITICAL: this must be the exact URL returned by submit_query,
-                    without any manual modifications.
-        report_type: Type of report to generate (default: sources)
-        rank: Taxonomic rank filter (REQUIRED for histogram/scatter on taxon index)
-        x_field: Attribute name for histogram x-axis or scatter plot x-axis
-                 (e.g., "chromosome_number", "assembly_span", "genome_size")
-        y_field: Attribute name for scatter plot y-axis
+    Retrieves axis and filter artifacts, composes query, calls API, formats output.
     """
-    logger.info(f"get_report called: search_url={search_url}, report_type={report_type}, "
-                f"rank={rank}, x_field={x_field}, y_field={y_field}")
 
-    # Validate and normalize URL encoding
-    # Import urllib for proper URL handling
-    from urllib.parse import quote, urlencode, urlparse, urlunparse
+    # If artifact tokens were provided (string), attempt to retrieve stored objects
+    if isinstance(identifiers_artifact_id, str):
+        identifiers_output = retrieve(identifiers_artifact_id)
+    if isinstance(attributes_artifact_id, str):
+        attributes_output = retrieve(attributes_artifact_id)
 
-    # Check if URL needs re-encoding (has unescaped characters)
-    parsed = urlparse(search_url)
-    if parsed.query and any(char in parsed.query for char in ['(', ')', ' ']):
-        logger.warning(f"URL contains unescaped characters, re-encoding: {search_url}")
-        # Re-encode only the unescaped characters, preserving already-encoded ones
-        query_params = {}
-        for pair in parsed.query.split('&'):
-            if '=' in pair:
-                key, value = pair.split('=', 1)
-                # Only encode if not already encoded (safe= preserves % for already-encoded chars)
-                query_params[key] = quote(value, safe='%')
+    if not isinstance(identifiers_output, dict):
+        raise ValueError(
+            "Invalid identifiers_artifact_id provided to get_report().\n"
+            "Ensure you pass the EXACT key from process_identifiers()\n"
+            "WITHOUT modification.\n\n"
+            "Note that the identifiers artifact is only valid for a limited time after creation.\n"
+            "If it has expired, you will need to re-run process_identifiers() to get a new artifact key."
+        )
+    if not isinstance(attributes_output, dict):
+        raise ValueError(
+            "Invalid attributes_artifact_id provided to get_report().\n"
+            "Ensure you pass the EXACT key from process_attributes()\n"
+            "WITHOUT modification.\n\n"
+            "Note that the attributes artifact is only valid for a limited time after creation.\n"
+            "If it has expired, you will need to re-run process_attributes() to get a new artifact key."
+        )
 
-        # Rebuild URL with properly encoded query
-        search_url = urlunparse((parsed.scheme, parsed.netloc, parsed.path,
-                                parsed.params, urlencode(query_params, safe='%'),
-                                parsed.fragment))
-        logger.info(f"Re-encoded URL: {search_url}")
+    if intent not in {"histogram", "scatter", "tree", "donut", "rainbow", "map"}:
+        raise ValueError(
+            f"""Intent '{intent}' is not currently supported by get_report().\n"""
+            f"""Valid intents are: histogram, scatter, tree, donut, rainbow, map."""
+        )
 
-    url = (
-        search_url.replace("/api/v2/", "/")
-        .replace("/search", "/api/v2/report")
-        .replace("/count", "/api/v2/report")
+    # Extract identifiers
+    taxa = identifiers_output.get("taxa", [])
+    assemblies = identifiers_output.get("assemblies", [])
+    samples = identifiers_output.get("samples", [])
+    taxon_filter_type = identifiers_output.get("taxon_filter_type", "children")
+    rank = identifiers_output.get("rank")
+
+    # Extract attributes
+    attributes = attributes_output.get("attributes", [])
+    fields = attributes_output.get("fields", [])
+    names = attributes_output.get("names", [])
+    ranks = attributes_output.get("ranks", [])
+
+    # Retrieve axis and filter artifacts if provided
+    x_axis = None
+    if x_axis_artifact_id and isinstance(x_axis_artifact_id, str):
+        x_axis = retrieve(x_axis_artifact_id)
+        print(f"Retrieved x_axis artifact: {x_axis}")
+
+    y_axis = None
+    if y_axis_artifact_id and isinstance(y_axis_artifact_id, str):
+        y_axis = retrieve(y_axis_artifact_id)
+
+    z_axis = None
+    if z_axis_artifact_id and isinstance(z_axis_artifact_id, str):
+        z_axis = retrieve(z_axis_artifact_id)
+
+    category = None
+    if category_artifact_id and isinstance(category_artifact_id, str):
+        category = retrieve(category_artifact_id)
+
+    parent_filter = None
+    if parent_filter_artifact_id and isinstance(parent_filter_artifact_id, str):
+        parent_filter = retrieve(parent_filter_artifact_id)
+
+    # Build base search params as dict
+    params = await build_search_params(
+        search_index=search_index,
+        taxa=taxa,
+        taxon_filter_type=taxon_filter_type,
+        assemblies=assemblies,
+        samples=samples,
+        rank=rank,
+        attributes=attributes,
+        fields=fields,
+        names=names,
+        ranks=ranks,
     )
-    search_index = url.split("result=")[1].split("&")[0]
-    logger.info(f"Extracted search_index: {search_index}")
-    url = update_query_string(url, "report", report_type)
-    need_rank = {"histogram", "scatter"} if "result=taxon" in url else set()
-    if need_rank and report_type in need_rank:
-        if not rank and "tax_rank%28" in url:
-            rank = url.split("tax_rank%28")[1].split("%29")[0]
-            logger.info(f"Extracted rank from URL: {rank}")
-        if not rank:
-            return (
-                f"Error: When querying {report_type} reports for the "
-                f"taxon index, a 'rank' parameter must be provided."
-            )
-        valid_ranks = await fetch_valid_ranks()
-        if rank not in valid_ranks:
-            return (f"Error: Invalid rank '{rank}' provided for {DATASTORE_NAME} taxa reports."
-                    f" Valid ranks are: {', '.join(valid_ranks)}.")
 
-        url = update_query_string(url, "rank", rank)
+    logger.info(f"Built base search params for {intent} report: {params}")
 
-    # Populate FIELD_CACHE before validation
-    await fetch_valid_types(search_index)
+    # Add report-specific parameters to params dict
+    params["report"] = intent
 
-    try:
-        if x_field:
-            x_field = validate_attribute_name(x_field, search_index, FIELD_CACHE)
-            if f"query={x_field}%20AND" not in url and f"query={x_field}&" not in url:
-                url = url.replace("query=", f"query={x_field}%20AND%20")
-        # if y_field:
-        #     y_field = validate_attribute_name(y_field, search_index, field_cache)
-        #     if "&fields=" in url:
-        #         url = url.replace("&fields=", f"&fields={y_field}")
-        #     else:
-        #         url += f"&fields={y_field}"
-    except ValueError as ve:
-        return f"""Error in attribute validation: {str(ve)}"""
+    x_field = None
 
-    url = url.replace("query=", "x=")
+    # Add axis parameters for distribution reports
+    if intent in {"histogram", "scatter", "tree"}:
+        if x_axis:
+            # x_axis should be from process_axis() output
+            if isinstance(x_axis, dict) and "field_or_rank" in x_axis:
+                params["x"] = x_axis["field_or_rank"]
+                if not x_axis.get("is_rank"):
+                    x_field = x_axis["field_or_rank"]
+                    # Extract just the field names from the fields dicts
+                    field_names = [f.get("name") for f in fields if isinstance(f, dict)]
+                    if x_field not in field_names:
+                        # If the x_axis field is not already in the fields list, add it as a name string
+                        params["fields"] = field_names + [x_field]
+                # if x_axis.get("modifiers"):
+                #     params["xMod"] = ",".join(x_axis["modifiers"])
+                params["xOpts"] = axis_opts_to_string(x_axis, is_cat=x_axis.get("is_rank", False))
 
-    data = await make_api_request(url)
-    if not data or "report" not in data:
-        return f"Unable to fetch report or no report found for URL: {url}."
+        if intent == "scatter" and y_axis:
+            # y_axis required for scatter
+            if isinstance(y_axis, dict) and "field_or_rank" in y_axis:
+                params["y"] = y_axis["field_or_rank"]
+                if y_axis.get("modifiers"):
+                    params["yMod"] = ",".join(y_axis["modifiers"])
+                params["yOpts"] = axis_opts_to_string(y_axis, is_cat=y_axis.get("is_rank", False))
 
-    if report_type == "sources":
-        return format_sources_report(data, url)
+        if intent == "tree" and y_axis:
+            # y_axis optional for tree (data at leaves)
+            if isinstance(y_axis, dict) and "field_or_rank" in y_axis:
+                params["y"] = y_axis["field_or_rank"]
+                if y_axis.get("modifiers"):
+                    params["yMod"] = ",".join(y_axis["modifiers"])
+                params["yOpts"] = axis_opts_to_string(y_axis, is_cat=y_axis.get("is_rank", False))
 
-    if report_type == "histogram":
-        return format_histogram_report(data, url)
+    # Add category parameter (grouping axis)
+    if category and isinstance(category, dict) and "field_or_rank" in category:
+        cat = category["field_or_rank"]
+        catOpts = axis_opts_to_string(category, is_cat=True)
+        params["cat"] = f"{cat}{catOpts}" if catOpts else cat
 
-    return f"""{DATASTORE_NAME} Report ({report_type}):
 
-{data['report']}
+    # Add filter for composition reports (donut, rainbow)
+    if intent in {"donut", "rainbow"} and parent_filter:
+        if isinstance(parent_filter, dict) and "attributes" in parent_filter:
+            # parent_filter contains base attributes for the composition
+            # This would be handled by merging into attributes instead
+            logger.info(f"Using parent_filter for {intent}: {parent_filter}")
 
-URL: {url}"""
+    if x_field is not None:
+        x_query = params.get("query", "").split(" AND ")
+        if x_query[0] != x_field:
+            x_query.insert(0, x_field)
+            params["x"] = " AND ".join(x_query).strip()
+            params.pop("query", None)
+
+    params["rank"] = rank  # Ensure rank is included in params for API
+
+    # Convert params dict to URL
+    api_url = params_dict_to_url(f"{API_BASE}/report", params)
+
+    logger.info(f"Report API URL: {api_url}")
+
+    # Make API request
+    data = await make_api_request(api_url)
+
+    # Build user-facing URL
+    report_url = build_user_facing_url(api_url)
+
+    # Format response
+    result = f"""
+Report generated for {intent} visualisation.
+
+Query: {user_query}
+
+Report URL:
+{report_url}
+
+Raw API response: {data}
+"""
+
+    return {
+        "user_query": user_query,
+        "report": result,
+    }
+
+
+get_report.__doc__ = GET_REPORT_PROMPT
 
 
 def register_tools(mcp) -> None:

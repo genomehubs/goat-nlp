@@ -4,7 +4,12 @@ from .helpers.api import make_api_request
 from .helpers.constants import FIELD_CACHE
 from .helpers.fetch import fetch_valid_types
 from .helpers.formatting import format_result_table, rank_description
-from .helpers.query import build_query_string, process_modifiers, set_exclusions
+from .helpers.query import (
+    build_search_params,
+    build_user_facing_url,
+    params_dict_to_url,
+    process_modifiers,
+)
 from .helpers.validation import (  # validate_attribute_names,
     validate_attribute_name,
     validate_attributes,
@@ -27,6 +32,7 @@ async def advanced_search(
     sort_by: str | None = None,
     sort_order: str | None = None,
     show_table: bool = False,
+    show_sources: bool = False,
     size: int = 5,
     page: int = 1,
     user_query: str | None = None,
@@ -157,61 +163,52 @@ using the get_attribute_selection_context or get_valid_types tools.
     names = filtered_names
     taxa = (taxa or []) + extra_taxa
 
-    query_string = build_query_string(taxa, rank, attributes, assemblies, samples, taxon_filter_type)
-    exclusions = set_exclusions(attributes)
-    logger.info(f"Built query_string: {query_string}")
-    logger.info(f"Built exclusions: {exclusions}")
+    # Build base search params as dict
+    params = await build_search_params(
+        search_index=search_index,
+        taxa=taxa,
+        taxon_filter_type=taxon_filter_type,
+        assemblies=assemblies,
+        samples=samples,
+        rank=rank,
+        attributes=attributes,
+        fields=fields,
+        names=names,
+        ranks=ranks,
+    )
 
+    logger.info(f"Built search params: {params}")
+
+    # Add pagination and sorting for table results
+    if show_table:
+        params["size"] = size
+        params["offset"] = (page - 1) * size
+        if sort_by:
+            params["sortBy"] = sort_by
+            if sort_order and sort_order.lower() in ["asc", "desc"]:
+                params["sortOrder"] = sort_order.lower()
+
+    # Choose endpoint based on intent
     endpoint = "search" if show_table else "count"
 
-    if query_string:
-        url = (
-            f"{API_BASE}/{endpoint}?query={query_string}"
-            f"&result={search_index}"
-            f"{exclusions}"
-        )
-    else:
-        # Empty query - count/show all records in index
-        url = f"{API_BASE}/{endpoint}?result={search_index}"
-    if size is not None:
-        url += f"&size={size}&offset={(page - 1) * size}"
-    url += "&includeEstimates=true&taxonomy=ncbi&report=sources"
-    if fields:
-        parsed_fields = []
-        for field in fields:
-            parsed_fields.append(field['name'])
-            if "modifier" in field:
-                for mod in field["modifier"]:
-                    if mod not in [
-                        "min", "max", "mean", "median", "mode", "length",
-                        "direct", "descendant", "ancestral", "missing"
-                    ]:
-                        logger.warning(f"Ignoring invalid modifier '{mod}' for field '{field['name']}'")
-                        continue
-                    parsed_fields.append(f"{field['name']}%3A{mod}")
-        url += "&fields=" + "%2C".join(parsed_fields)
-    if sort_by:
-        url += f"&sortBy={sort_by}"
-        if sort_order and sort_order.lower() in ["asc", "desc"]:
-            url += f"&sortOrder={sort_order.lower()}"
-    if names:
-        url += "&names=" + "%2C".join(names)
-    if ranks:
-        url += "&ranks=" + "%2C".join(ranks)
+    # Convert params dict to URL
+    api_url = params_dict_to_url(f"{API_BASE}/{endpoint}", params)
 
-    data = await make_api_request(url)
+    # Make API request
+    data = await make_api_request(api_url)
 
     # Format response based on what was queried
     if show_table:
         if not data or "results" not in data:
-            return f"Unable to fetch results or no results found for URL: {url}."
+            return f"Unable to fetch results or no results found for URL: {api_url}."
         count = data.get("status", {}).get("hits", 0)
-        search_url = url.replace("/api/v2", "")
     else:
         if not data or "count" not in data:
-            return f"Unable to fetch count or no count found for URL: {url}."
+            return f"Unable to fetch count or no count found for URL: {api_url}."
         count = data.get("count", 0)
-        search_url = url.replace("/api/v2", "").replace("count?", "search?")
+
+    # Build user-facing URL
+    search_url = build_user_facing_url(api_url)
 
     if taxa and rank and search_index == "taxon":
         description = f"{count} {rank_description(rank)} within {','.join(taxa)}"
@@ -251,6 +248,13 @@ supplemented by additional metadata from the {DATASTORE_NAME} database.
 This table shows the top {size} results.
 
 {table}
+"""
+    if show_sources: result += """
+
+Sources were requested, but this is currently a placeholder.
+In the future, this section will include a summary of the data sources that contributed to the results,
+such as which databases or datasets were used, and how many records came from each source.
+
 """
 
     result += f"""

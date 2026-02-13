@@ -13,53 +13,47 @@ from .helpers.validation import validate_attribute_name
 logger = get_logger(__name__)
 
 
-SUBMIT_QUERY_PROMPT = f"""Parse query parameters to form a {DATASTORE_NAME} URL, optionally
-return a count and table.
+SUBMIT_QUERY_PROMPT = f"""Parse query parameters to form a {DATASTORE_NAME} URL and return results.
 
-CRITICAL: ONLY RUN THIS TOOL AFTER PROCESSING IDENTIFIERS WITH process_identifiers()
-          AND ATTRIBUTES WITH process_attributes()!
-          YOU MUST PASS THE UNCHANGED IDENTIFIERS AND ATTRIBUTES ARTEFACT KEYS AS INPUT!
+⚠️  CRITICAL: Pass the EXACT artifact keys from process_identifiers() and process_attributes()
+   WITHOUT any modification. Do not reconstruct these objects yourself.
 
-GOTCHAS: The most common reason this tool fails is because the input data structures
-          have been modified or incorrectly constructed. ENSURE YOU PASS THE EXACT
-          OUTPUTS FROM process_identifiers() AND process_attributes() WITHOUT MODIFICATION!
+PARAMETERS:
 
-FOLLOW THESE STEPS EXACTLY:
+1. **identifiers_artifact_id**: Output key from process_identifiers()
 
-1. **identifiers_output**: Pass in the process_identifiers() artifact key EXACTLY. DO NOT MODIFY IT.
+2. **attributes_artifact_id**: Output key from process_attributes()
 
-2. **attributes_output**: Pass in the process_attributes() artifact key EXACTLY. DO NOT MODIFY IT.
+3. **intent**: Type of result (choose one)
+   - "count": Total count only
+   - "table": Paginated results + count (single query - do not call again for count!)
+   - "sources": Data sources + count (single query)
 
-3. **intent**: What kind of result
-   - "count": "How many..." (count species)
-   - "table": "Which...", "List..." (show results)
+4. **sort_by**: (for intent="table") Field to sort by (e.g., "genome_size")
 
-If intent is table, ALSO PROCESS:
-4. **sort_by**: Attribute name to sort results by, with optional modifier
+5. **sort_order**: (for intent="table") "asc" or "desc"
 
-5. **sort_order**: Sort order - "asc" or "desc"
+6. **size**: (for intent="table") Limit results (default 10)
 
-6. **size**: Result size limit (default 10 for tables, None for counts)
-
-7. **page**: Page number for pagination (default 1)
+7. **page**: (for intent="table") Page number (default 1)
 
 
 EXAMPLE:
 Query: "How many mammal species have minimum directly measured genome size < 3G?"
-Step 1: process_identifiers() output → IDENTIFIERS_OUTPUT = {{
-    artifact_id: aebc12345...,
-}}
-Step 2: process_attributes() output → ATTRIBUTES_OUTPUT = {{
-    artifact_id: fghd67890...,
-}}
-THEN CALL:
+
 submit_query(
-    identifiers_artifact_id=IDENTIFIERS_ARTIFACT_ID,
-    attributes_artifact_id=ATTRIBUTES_ARTIFACT_ID,
-    intent="count",
-    sort_by=None,
-    sort_order=None,
-    size=None,
+    identifiers_artifact_id="aebc12345...",
+    attributes_artifact_id="fghd67890...",
+    intent="count"
+)
+
+To get results as a table (which includes the count):
+
+submit_query(
+    identifiers_artifact_id="aebc12345...",
+    attributes_artifact_id="fghd67890...",
+    intent="table",
+    size=10,
     page=1
 )
 
@@ -76,20 +70,27 @@ async def submit_query(
     size: int | None = None,
     page: int = 1,
 ) -> dict[str, Any]:
-    f"""Parse processed attributes and identifiers into a {DATASTORE_NAME} URL, optionally return a count and table.
+    f"""Parse processed attributes and identifiers into a {DATASTORE_NAME} URL and return results.
+
+    IMPORTANT: intent="table" returns BOTH count AND results in a single query.
+               Do NOT call this tool twice for count+table - use intent="table" once.
 
     Args:
         identifiers_artifact_id: Artifact id from process_identifiers() containing identifier-related parameters.
         attributes_artifact_id: Artifact id from process_attributes() containing attribute-related parameters.
-        intent: Result type - "count" (default), "table", "histogram", or "record"
+        intent: Result type - "count" (just count), "table" (count + paginated
+            results), or "sources" (count + data sources)
         search_index: The search index to use ("taxon", "assembly", or "sample")
-        sort_by: Optional field to sort results by (e.g., "genome_size")
-        sort_order: Optional sort order - "asc" or "desc"
-        size: Optional result size limit (default 10 for tables, None for counts)
-        page: Optional page number for pagination (default 1)
+        sort_by: Optional field to sort results by (e.g., "genome_size") - only used with intent="table"
+        sort_order: Optional sort order - "asc" or "desc" - only used with intent="table"
+        size: Optional result size limit (default 10 for tables)
+        page: Optional page number for pagination (default 1, only for intent="table")
 
     Returns:
-        dict with artifact_id, URL, count and result table (if requested)
+        dict with result field containing:
+        - For intent="count": count value
+        - For intent="table": count and paginated table of results
+        - For intent="sources": count and list of data sources
     """
 
     # If artifact tokens were provided (string), attempt to retrieve stored objects
@@ -115,17 +116,17 @@ async def submit_query(
             "If it has expired, you will need to re-run process_attributes() to get a new artifact key."
         )
 
-    # if not validate_dict(attributes_output) or not validate_dict(identifiers_output):
-    #     raise ValueError(
-    #         "Invalid identifiers_artifact_id or attributes_artifact_id provided to submit_query().\n"
-    #         "Ensure you pass the EXACT key from process_identifiers() and process_attributes()\n"
-    #         "WITHOUT modification."
-    #     )
-    if intent not in {"count", "table", "histogram", "record"}:
-        raise ValueError(
-            f"""Invalid intent '{intent}' provided to submit_query().\n"""
-            f"""Valid intents are: "count", "table", "histogram", or "record"."""
-        )
+    if intent not in {"count", "sources", "table"}:
+        if intent in {"histogram", "scatter", "tree", "donut", "rainbow"}:
+            raise ValueError(
+                f"""Intent '{intent}' is not currently supported by submit_query().\n"""
+                f"""For these types of results, use get_report() instead with the appropriate report_type."""
+            )
+        else:
+            raise ValueError(
+                f"""Invalid intent '{intent}' provided to submit_query().\n"""
+                f"""Valid intents are: "count", "table" or "sources"."""
+            )
 
     taxa = identifiers_output.get("taxa", [])
     assemblies = identifiers_output.get("assemblies", [])
@@ -135,6 +136,7 @@ async def submit_query(
     user_query = identifiers_output.get("user_query", "")
 
     show_table = intent == "table"
+    show_sources = intent == "sources"
 
     if show_table:
         if size is None:
@@ -171,6 +173,7 @@ async def submit_query(
         names=names,
         ranks=ranks,
         show_table=show_table,
+        show_sources=show_sources,
         size=size if show_table else None,
         sort_by=sort_by if show_table else None,
         sort_order=sort_order if show_table else None,
