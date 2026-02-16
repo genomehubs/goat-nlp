@@ -3,6 +3,7 @@ from ..logging_config import get_logger
 from .artifact_store import retrieve
 from .helpers.api import make_api_request
 from .helpers.axis import axis_opts_to_string
+from .helpers.errors import artifact_retrieval_error, invalid_intent_error
 from .helpers.query import (
     build_search_params,
     build_user_facing_url,
@@ -89,26 +90,14 @@ async def get_report(
         attributes_output = retrieve(attributes_artifact_id)
 
     if not isinstance(identifiers_output, dict):
-        raise ValueError(
-            "Invalid identifiers_artifact_id provided to get_report().\n"
-            "Ensure you pass the EXACT key from process_identifiers()\n"
-            "WITHOUT modification.\n\n"
-            "Note that the identifiers artifact is only valid for a limited time after creation.\n"
-            "If it has expired, you will need to re-run process_identifiers() to get a new artifact key."
-        )
+        raise ValueError(artifact_retrieval_error("identifiers", "get_report"))
     if not isinstance(attributes_output, dict):
-        raise ValueError(
-            "Invalid attributes_artifact_id provided to get_report().\n"
-            "Ensure you pass the EXACT key from process_attributes()\n"
-            "WITHOUT modification.\n\n"
-            "Note that the attributes artifact is only valid for a limited time after creation.\n"
-            "If it has expired, you will need to re-run process_attributes() to get a new artifact key."
-        )
+        raise ValueError(artifact_retrieval_error("attributes", "get_report"))
 
-    if intent not in {"histogram", "scatter", "tree", "donut", "rainbow", "map"}:
+    valid_intents = {"histogram", "scatter", "tree", "donut", "rainbow", "map"}
+    if intent not in valid_intents:
         raise ValueError(
-            f"""Intent '{intent}' is not currently supported by get_report().\n"""
-            f"""Valid intents are: histogram, scatter, tree, donut, rainbow, map."""
+            invalid_intent_error(intent, valid_intents, "get_report")
         )
 
     # Extract identifiers
@@ -205,7 +194,6 @@ async def get_report(
         cat = category["field_or_rank"]
         catOpts = axis_opts_to_string(category, is_cat=True)
         params["cat"] = f"{cat}{catOpts}" if catOpts else cat
-
 
     # Add filter for composition reports (donut, rainbow)
     if intent in {"donut", "rainbow"} and parent_filter:

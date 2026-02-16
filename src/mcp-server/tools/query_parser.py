@@ -6,6 +6,11 @@ from ..config import DATASTORE_NAME
 from ..logging_config import get_logger
 from .artifact_store import retrieve
 from .helpers.constants import FIELD_CACHE
+from .helpers.errors import (
+    artifact_retrieval_error,
+    invalid_intent_error,
+    unsupported_intent_error,
+)
 from .helpers.fetch import fetch_valid_types
 from .helpers.query import set_search_tips
 from .helpers.validation import validate_attribute_name
@@ -100,33 +105,15 @@ async def submit_query(
         attributes_output = retrieve(attributes_artifact_id)
 
     if not isinstance(identifiers_output, dict):
-        raise ValueError(
-            "Invalid identifiers_artifact_id provided to submit_query().\n"
-            "Ensure you pass the EXACT key from process_identifiers()\n"
-            "WITHOUT modification.\n\n"
-            "Note that the identifiers artifact is only valid for a limited time after creation.\n"
-            "If it has expired, you will need to re-run process_identifiers() to get a new artifact key."
-        )
+        raise ValueError(artifact_retrieval_error("identifiers", "submit_query"))
     if not isinstance(attributes_output, dict):
-        raise ValueError(
-            "Invalid attributes_artifact_id provided to submit_query().\n"
-            "Ensure you pass the EXACT key from process_attributes()\n"
-            "WITHOUT modification.\n\n"
-            "Note that the attributes artifact is only valid for a limited time after creation.\n"
-            "If it has expired, you will need to re-run process_attributes() to get a new artifact key."
-        )
+        raise ValueError(artifact_retrieval_error("attributes", "submit_query"))
 
     if intent not in {"count", "sources", "table"}:
         if intent in {"histogram", "scatter", "tree", "donut", "rainbow"}:
-            raise ValueError(
-                f"""Intent '{intent}' is not currently supported by submit_query().\n"""
-                f"""For these types of results, use get_report() instead with the appropriate report_type."""
-            )
+            raise ValueError(unsupported_intent_error(intent, "submit_query", "get_report()"))
         else:
-            raise ValueError(
-                f"""Invalid intent '{intent}' provided to submit_query().\n"""
-                f"""Valid intents are: "count", "table" or "sources"."""
-            )
+            raise ValueError(invalid_intent_error(intent, {"count", "table", "sources"}, "submit_query"))
 
     taxa = identifiers_output.get("taxa", [])
     assemblies = identifiers_output.get("assemblies", [])

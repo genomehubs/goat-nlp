@@ -5,6 +5,7 @@ from typing import Any
 from ..config import DATASTORE_NAME
 from ..logging_config import get_logger
 from .helpers.constants import FIELD_CACHE
+from .helpers.errors import invalid_attribute_error, invalid_option_error, parsing_error
 from .helpers.fetch import fetch_valid_types
 from .helpers.processor_common import finalise_and_store
 from .helpers.validation import validate_attribute_name
@@ -155,19 +156,13 @@ async def process_axis(
     # Validate axis_name
     valid_axis_names = {"x", "y", "z", "category"}
     if axis_name not in valid_axis_names:
-        raise ValueError(
-            f"Invalid axis_name '{axis_name}'. "
-            f"Valid options are: {', '.join(valid_axis_names)}"
-        )
+        raise ValueError(invalid_option_error("axis_name", axis_name, valid_axis_names))
 
     # Validate scale if provided
     if scale:
         valid_scales = {"linear", "sqrt", "log", "log2", "log10"}
         if scale not in valid_scales:
-            raise ValueError(
-                f"Invalid scale '{scale}'. "
-                f"Valid options are: {', '.join(valid_scales)}"
-            )
+            raise ValueError(invalid_option_error("scale", scale, valid_scales))
 
     # Parse axis_definition to extract field/rank and modifiers
     # Format: "[modifier...] field_name"
@@ -205,10 +200,7 @@ async def process_axis(
             break
 
     if not field_or_rank:
-        raise ValueError(
-            f"Could not extract field or rank name from axis_definition: '{axis_definition}'\n"
-            f"Expected format: '[modifier...] field_name' or 'rank_name'"
-        )
+        raise ValueError(parsing_error("axis_definition", axis_definition, "[modifier...] field_name"))
 
     # Check if it's a rank or a field
     valid_ranks = await fetch_valid_ranks()
@@ -220,11 +212,9 @@ async def process_axis(
         try:
             validate_attribute_name(field_or_rank, search_index, FIELD_CACHE)
         except ValueError as e:
+            valid_ranks = await fetch_valid_ranks()
             raise ValueError(
-                f"Invalid field or rank '{field_or_rank}' in axis_definition.\n"
-                f"Use get_attribute_selection_context() to check valid field names,\n"
-                f"or get_valid_ranks() to check valid ranks.\n"
-                f"Original error: {e}"
+                invalid_attribute_error(field_or_rank, "field or rank", valid_ranks)
             ) from e
 
     if show_other:

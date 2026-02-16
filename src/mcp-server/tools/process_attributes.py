@@ -5,6 +5,7 @@ from typing import Any
 from ..config import DATASTORE_NAME
 from ..logging_config import get_logger
 from .helpers.constants import FIELD_CACHE
+from .helpers.errors import invalid_attribute_error
 from .helpers.fetch import fetch_valid_types
 from .helpers.processor_common import finalise_and_store
 from .helpers.validation import validate_attributes
@@ -160,19 +161,13 @@ async def process_attributes(
         for name in names:
             prefix = name.split(":", 1)[0] if ":" in name else name
             if prefix not in valid_names:
-                raise ValueError(
-                    f"""Invalid name '{name}' provided to process_attributes().
-Valid names are: {', '.join(valid_names)}."""
-                )
+                raise ValueError(invalid_attribute_error(name, "name", valid_names))
 
     if ranks:
         valid_ranks = await fetch_valid_ranks()
         for rank in ranks:
             if rank not in valid_ranks:
-                raise ValueError(
-                    f"""Invalid rank '{rank}' provided to process_attributes().
-Valid ranks are: {', '.join(valid_ranks)}."""
-                )
+                raise ValueError(invalid_attribute_error(rank, "rank", valid_ranks))
 
     filtered_fields = []
     names = names or []
