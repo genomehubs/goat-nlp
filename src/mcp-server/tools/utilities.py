@@ -1,7 +1,7 @@
 import re
 import time
 
-from ..config import API_BASE, DATASTORE_NAME, SITE_NAME
+from ..config import API_BASE, DATASTORE_NAME, WEB_URL
 from .helpers.api import make_api_request
 
 RANK_CACHE: list[str] = []
@@ -193,7 +193,7 @@ async def choose_search_index(query: str) -> str:
     )
 
 
-async def check_taxon_exists(name: str) -> dict:
+async def check_taxon_exists(name: str, response_format: str = "data") -> dict:
     f"""Check if a specific taxon name exists in {DATASTORE_NAME} and get basic info.
 
     CRITICAL: Use this tool to validate scientific names before calling submit_query,
@@ -205,7 +205,7 @@ async def check_taxon_exists(name: str) -> dict:
 
     This tool handles the translation from common names to scientific names.
     You should provide the scientific name you believe is correct, and this
-    tool will validate it and return a query_string for use in submit_query.
+    tool will validate it and return structured data for use in submit_query.
 
     Common name translations you should make before calling this tool:
     - "mammals" → check_taxon_exists("Mammalia")
@@ -213,57 +213,78 @@ async def check_taxon_exists(name: str) -> dict:
     - "dogs" → check_taxon_exists("Canidae") or check_taxon_exists("Canis")
     - "bats" → check_taxon_exists("Chiroptera")
 
-    The returned dict includes a query_string field, which should be used
-    as the taxon parameter in subsequent {DATASTORE_NAME} submit_query calls for best results.
+    The return value depends on the response_format parameter:
+    - "data" (default): Returns a dict with structured data about the taxon
+    - "markdown": Adds a markdown summary of the taxon information
+    - "url": Adds the URL to the taxon record in {DATASTORE_NAME}
+    - "full": Returns a dict with all optional information included, even if some fields are empty
+
+    The data dict includes a query_string field, which should be used as the taxon
+    parameter in subsequent {DATASTORE_NAME} process_identifiers() calls for best results.
 
     Args:
-        name: Scientific taxon name to check (e.g., 'Mammalia', 'Felidae', 'Canis')
-    """
-    # Test if this taxon has any data by doing a simple count query
-    url = (
-        f"{API_BASE}/count?query=tax_tree%28{name}%29"
-        f"&result=taxon&offset=0&includeEstimates=true&taxonomy=ncbi"
-    )
-    data = await make_api_request(url)
+        name: Scientific taxon name to check
+        response_format: Format preference - "data", "markdown", "url", or "full" (default: "data")
 
-    if not data or "count" not in data:
+    Returns:
+        dict with keys: exists, scientific_name, rank, taxon_id, query_string,
+        count_in_{DATASTORE_NAME.lower()}, url, markdown
+        (only populated fields depend on response_format, but full envelope always returned)
+    """
+    # Query API
+    url = f"{API_BASE}/count?query=tax_tree%28{name}%29&result=taxon&offset=0&includeEstimates=true&taxonomy=ncbi"
+    count_data = await make_api_request(url)
+
+    if not count_data or "count" not in count_data:
         return {
             "exists": False,
             "scientific_name": name,
             "error": f"Unable to query {DATASTORE_NAME} API",
         }
 
-    if data["count"] == 0:
-        return {"exists": False, "scientific_name": name, f"count_in_{SITE_NAME}": 0}
+    if count_data["count"] == 0:
+        return {
+            "exists": False,
+            "scientific_name": name,
+            f"count_in_{DATASTORE_NAME.lower()}": 0,
+        }
 
-    # Try to get more info about this taxon
-    taxon_url = (
-        f"{API_BASE}/search?query=tax_name%28{name}%29"
-        f"&result=taxon&size=1&taxonomy=ncbi"
-    )
+    # Get detailed info
+    taxon_url = f"{API_BASE}/search?query=tax_name%28{name}%29&result=taxon&size=1&taxonomy=ncbi"
     taxon_data = await make_api_request(taxon_url)
 
-    # Extract basic info
     rank = "Unknown"
     taxon_id = ""
-    if (
-        taxon_data
-        and "results" in taxon_data
-        and taxon_data["results"]
-        and "result" in taxon_data["results"][0]
-    ):
-        result_info = taxon_data["results"][0]["result"]
+    if taxon_data and "results" in taxon_data and taxon_data["results"]:
+        result_info = taxon_data["results"][0].get("result", {})
         rank = result_info.get("taxon_rank", "Unknown")
         taxon_id = str(result_info.get("taxon_id", ""))
 
-    return {
+    record_url = f"{WEB_URL}/record?result=taxon&recordId={taxon_id}&taxonomy=ncbi"
+
+    # Build full envelope
+    result = {
         "exists": True,
         "scientific_name": name,
         "rank": rank,
         "taxon_id": taxon_id,
         "query_string": f"{taxon_id}[{name}]",
-        f"count_in_{SITE_NAME}": data["count"],
+        f"count_in_{DATASTORE_NAME.lower()}": count_data["count"],
+        "url": record_url,
     }
+
+    if response_format in {"markdown", "full"}:
+        # Add markdown summary
+        result["markdown"] = (
+            f"**{name}** ({rank})\n\n"
+            f"- ID: {taxon_id}\n"
+            f"- Records in {DATASTORE_NAME}: {count_data['count']}\n"
+            f"- [View in {DATASTORE_NAME}]({record_url})"
+        )
+
+    # If client requested only one format, could return just that field
+    # but returning full envelope is more flexible
+    return result
 
 
 def register_tools(mcp) -> None:
