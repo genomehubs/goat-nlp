@@ -6,6 +6,7 @@ from ..config import DATASTORE_NAME
 from ..logging_config import get_logger
 from .helpers.normalisation import normalise_to_list
 from .helpers.processor_common import finalise_and_store
+from .helpers.validation import validate_prefixes
 
 logger = get_logger(__name__)
 
@@ -43,6 +44,9 @@ FOLLOW THESE STEPS EXACTLY:
      Pass as: samples="SRR1234567" OR as a list, e.g. samples=["SRR1234567", "SRR7654321"]
      For NOT filters, prefix with !, e.g. samples=["SRR1234567", "!SRR7654321"]
      If no samples are mentioned, pass an empty list: samples=[]
+
+  If an identifier does not match any of the above types, consider that it may be an attribute that should be 
+  processed with process_attributes() instead.
 
 2. **rank** (if applicable): The taxonomic rank
    Examples: "species", "family", "genus", "order"
@@ -103,6 +107,13 @@ async def process_identifiers(
     taxa = normalise_to_list(taxa)
     assemblies = normalise_to_list(assemblies)
     samples = normalise_to_list(samples)
+
+    if taxa and not validate_prefixes(taxa, "taxa"):
+        raise ValueError("Taxa identifiers must be valid scientific names or IDs.")
+    if assemblies and not validate_prefixes(assemblies, "assemblies"):
+        raise ValueError("Assembly identifiers must be valid accessions like GCF_000002305.6.")
+    if samples and not validate_prefixes(samples, "samples"):
+        raise ValueError("Sample identifiers must be valid accessions like SRR1234567.")
 
     # Clean and encode taxa (handle exclamation marks for NOT filters)
     taxa = [t.strip().replace("!", "%21") for t in taxa if t.strip() != ""]
@@ -227,5 +238,4 @@ if __name__ == "__main__":
         print("✅ All tests completed successfully!")
         print("=" * 60)
 
-    asyncio.run(test_process_identifiers())
     asyncio.run(test_process_identifiers())

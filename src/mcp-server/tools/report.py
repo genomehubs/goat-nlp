@@ -72,7 +72,6 @@ async def get_report(
     # Visualisation axes (for histogram, scatter, tree, map)
     x_axis_artifact_id: str | None = None,  # Required: histogram, scatter
     y_axis_artifact_id: str | None = None,  # Required: scatter; Optional: tree
-    z_axis_artifact_id: str | None = None,  # Optional: tree
     category_artifact_id: str | None = None,  # Optional: histogram, scatter, tree, map
     # Hierarchical filters (for donut, rainbow)
     parent_filter_artifact_id: str | None = None,  # "broader scope for main query"
@@ -122,10 +121,6 @@ async def get_report(
     y_axis = None
     if y_axis_artifact_id and isinstance(y_axis_artifact_id, str):
         y_axis = retrieve(y_axis_artifact_id)
-
-    z_axis = None
-    if z_axis_artifact_id and isinstance(z_axis_artifact_id, str):
-        z_axis = retrieve(z_axis_artifact_id)
 
     category = None
     if category_artifact_id and isinstance(category_artifact_id, str):

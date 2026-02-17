@@ -171,9 +171,16 @@ def validate_operator(operator: str, meta: dict) -> str:
 
 
 def validate_attribute_value(value: Any, meta: dict) -> str:
-    f"""Validate and format an attribute value for {DATASTORE_NAME} query."""
-    if meta.get("processed_type", "").endswith("keyword") and meta.get("constraint", {}).get("enum"):
-        valid_values = [v.lower() for v in meta["constraint"]["enum"]]
+    f"""Validate and format an attribute value for {DATASTORE_NAME} query.
+
+    For numeric fields, also validates min/max constraints from metadata.
+    """
+    processed_type = meta.get("processed_type", "")
+    constraint = meta.get("constraint", {})
+
+    # Keyword/enum validation
+    if processed_type.endswith("keyword") and constraint.get("enum"):
+        valid_values = [v.lower() for v in constraint["enum"]]
         if isinstance(value, str):
             values = [v.strip().lower() for v in value.split(",")]
         elif isinstance(value, list):
@@ -182,6 +189,33 @@ def validate_attribute_value(value: Any, meta: dict) -> str:
             if v.lstrip("!") not in valid_values:
                 raise ValueError(f"Invalid value '{v}' for attribute. Must be one of {valid_values}.")
         return "%2C".join(values)
+
+    # Numeric field validation
+    if "number" in processed_type or "integer" in processed_type:
+        # Convert to numeric if string
+        if isinstance(value, str):
+            try:
+                numeric_value = float(value) if "." in value else int(value)
+            except ValueError as e:
+                raise ValueError(
+                    f"Expected numeric value for {processed_type} field, got '{value}'."
+                ) from e
+        else:
+            numeric_value = value
+
+        # Check against field constraints
+        if "minimum" in constraint and numeric_value < constraint["minimum"]:
+            raise ValueError(
+                f"Value {numeric_value} is below minimum constraint of {constraint['minimum']} "
+                f"for this field."
+            )
+
+        if "maximum" in constraint and numeric_value > constraint["maximum"]:
+            raise ValueError(
+                f"Value {numeric_value} exceeds maximum constraint of {constraint['maximum']} "
+                f"for this field."
+            )
+
     return value
 
 
@@ -442,3 +476,20 @@ async def set_search_index(
         search_index = await choose_search_index(user_query)
         logger.info(f"Inferred search_index from query: {search_index}")
     return search_index
+
+
+def validate_prefixes(prefixes: list, kind: str) -> bool:
+    """Check if a string starts with a valid prefix."""
+    if not isinstance(prefixes, list):
+        prefixes = [prefixes]
+    for prefix in prefixes:
+        if not isinstance(prefix, str):
+            return False
+        if kind == "assemblies":
+            valid_prefixes = ["gca_", "gcf_", "gcs_", "gcn_", "gcp_", "gcr_", "gcs_", "wgs", "asm"]
+        elif kind == "samples":
+            valid_prefixes = ["srs", "srr", "srx", "sam", "ers", "erp", "erx", "drr", "drx", "samea", "sameg"]
+        else:
+            return True  # No specific prefix requirements for taxon index
+        clean_string = prefix.replace("!", "").strip().lower()
+        return any(clean_string.startswith(valid_prefix) for valid_prefix in valid_prefixes)

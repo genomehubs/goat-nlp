@@ -1,3 +1,5 @@
+from .validation import validate_attribute_value
+
 # helpers/errors.py
 """Centralized error messages for LLM-facing tools."""
 
@@ -53,3 +55,45 @@ Expected format: {expected_format}."""
 def validation_error(tool_name: str, validation_msg: str) -> str:
     """Wrapper for general validation errors from called functions."""
     return f"""Validation error in {tool_name}(): {validation_msg}"""
+
+# Value errors
+
+
+def invalid_count_error(param_name: str, value: int, min_allowed: int = 1) -> str:
+    """For bin_count, page, size validation."""
+    return f"""Invalid {param_name}: {value}.
+{param_name} must be {min_allowed} or greater.
+Examples: {param_name}={min_allowed}, {param_name}={min_allowed * 10}"""
+
+
+def invalid_range_error(
+    field_name: str,
+    min_value: float | None,
+    max_value: float | None,
+    field_meta: dict
+) -> str | None:
+    """Validate min/max range values against field metadata.
+
+    Calls validate_attribute_value for numeric constraints.
+    Returns error message if invalid, None if valid.
+    """
+    # Basic range logic errors
+    if min_value is not None and max_value is not None:
+        if min_value == max_value:
+            return f"""Invalid range: min_value and max_value cannot be equal ({min_value}).
+To filter a single value, use process_attributes() instead."""
+        if min_value > max_value:
+            return f"""Invalid range: min_value ({min_value}) cannot be greater than max_value ({max_value}).
+Please check your values and try again."""
+
+    if field_meta.get("type") in {"integer", "float"}:
+        # Validate against field constraints using validate_attribute_value
+        try:
+            if min_value is not None:
+                validate_attribute_value(min_value, field_meta)
+            if max_value is not None:
+                validate_attribute_value(max_value, field_meta)
+        except ValueError as e:
+            return str(e)
+
+    return None

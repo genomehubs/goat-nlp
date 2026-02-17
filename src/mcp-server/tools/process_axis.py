@@ -5,7 +5,13 @@ from typing import Any
 from ..config import DATASTORE_NAME
 from ..logging_config import get_logger
 from .helpers.constants import FIELD_CACHE
-from .helpers.errors import invalid_attribute_error, invalid_option_error, parsing_error
+from .helpers.errors import (
+    invalid_attribute_error,
+    invalid_count_error,
+    invalid_option_error,
+    invalid_range_error,
+    parsing_error,
+)
 from .helpers.fetch import fetch_valid_types
 from .helpers.processor_common import finalise_and_store
 from .helpers.validation import validate_attribute_name
@@ -34,7 +40,7 @@ WHEN TO USE process_axis_complex() INSTEAD:
 FOLLOW THESE STEPS EXACTLY:
 
 1. **axis_name**: Which axis this definition applies to
-   Options: "x", "y", "z", or "category"
+   Options: "x", "y", or "category"
    Examples:
    - Histogram x-axis: axis_name="x"
    - Scatter plot axes: axis_name="x" (first call), axis_name="y" (second call)
@@ -58,7 +64,7 @@ FOLLOW THESE STEPS EXACTLY:
    - For category axes: limits display to top N categories (e.g., 10 most common phyla)
    - For keyword axes: limits results to N groups
    Examples: 10, 20, 50
-   If not specified, API will choose appropriate default.
+   If specified, must be > 0. If not specified, API will choose appropriate default.
    APPLIES TO: histogram (x-axis), scatter (x/y axes), category grouping
 
 4. **show_other**: Whether to include an "Other" bin/category for low-frequency groups (optional, default: False)
@@ -216,6 +222,15 @@ async def process_axis(
             raise ValueError(
                 invalid_attribute_error(field_or_rank, "field or rank", valid_ranks)
             ) from e
+        if min_value is not None or max_value is not None:
+            field_meta = FIELD_CACHE.get(search_index, {}).get(field_or_rank, {})
+            if range_error := invalid_range_error(
+                field_or_rank, min_value, max_value, field_meta
+            ):
+                raise ValueError(range_error)
+
+    if bin_count is not None and bin_count < 1:
+        raise ValueError(invalid_count_error("bin_count", bin_count, 1))
 
     if show_other:
         bin_count = f"{bin_count or 5}+"
