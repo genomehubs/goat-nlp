@@ -11,12 +11,11 @@ Individual instances should be site-scoped by updating the configuration as desc
 - **Process attributes:** `process_attributes` — Validate and canonicalise attribute filters, fields, names and ranks; returns an artifact token for downstream steps.
 - **Process identifiers:** `process_identifiers` — Extract and validate taxa, assemblies, samples, rank and `taxon_filter_type`; returns an artifact token.
 - **Query runner:** `submit_query` — Combine identifier and attribute artifacts into a query URL and execute the search; supports intents: `count`, `table`, `histogram`, `record`.
-- **Utilities:** `choose_search_index`, `check_taxon_exists`, `get_example_queries`, `get_valid_ranks` — Helpers for index selection, taxon validation, example queries, and fetching valid ranks.
+- **Utilities:** `choose_search_index`, `check_taxon_exists`, `get_valid_ranks` — Helpers for index selection, taxon validation, and fetching valid ranks.
 
 **Resources**
 
 - **`resource://{SITE_NAME}/description`** → `get_datastore_description` — Short human-readable description for prompts or UIs.
-- **`resource://{SITE_NAME}/example-queries`** → `get_example_queries_resource` — Curated example queries grouped by category to guide users and LLM prompts.
 
 How they fit together (typical flow):
 

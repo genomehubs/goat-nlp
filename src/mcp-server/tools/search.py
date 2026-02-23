@@ -1,9 +1,12 @@
+from typing import Any
+
 from ..config import API_BASE, DATASTORE_NAME
 from ..logging_config import get_logger
 from .helpers.api import make_api_request
 from .helpers.constants import FIELD_CACHE
+from .helpers.errors import ToolExecutionError
 from .helpers.fetch import fetch_valid_types
-from .helpers.formatting import format_result_table, rank_description
+from .helpers.formatting import rank_description
 from .helpers.query import (
     build_search_params,
     build_user_facing_url,
@@ -36,7 +39,7 @@ async def advanced_search(
     size: int = 5,
     page: int = 1,
     user_query: str | None = None,
-) -> str:
+) -> dict[str, Any]:
     f"""Advanced search tool for querying {DATASTORE_NAME} with complex parameters.
 
     Args:
@@ -61,9 +64,10 @@ async def advanced_search(
         user_query: Original user query - helps auto-extract rank if not explicitly provided.
                     CRITICAL: ALWAYS provide the original user query string here.
     """
-    # Validate that user_query is provided
     if user_query is None or not user_query.strip():
-        return """Error: The 'user_query' parameter is required but was not provided.
+        raise ToolExecutionError(
+            "advanced_search",
+            """The 'user_query' parameter is required but was not provided.
 
 CRITICAL: You MUST always include the original user question in the user_query parameter
 when calling submit_query. This allows automatic extraction of taxonomic rank and other
@@ -76,7 +80,7 @@ submit_query(
     user_query="How many mammal species have genome size data"
 )
 
-Please retry the call with the user_query parameter included."""
+Please retry the call with the user_query parameter included.""")
 
     # Auto-extract rank from user_query if not provided
     if rank is None and search_index == "taxon":
@@ -124,12 +128,14 @@ Please retry the call with the user_query parameter included."""
             sort_by = validate_attribute_name(sort_by, search_index, FIELD_CACHE)
     except ValueError as ve:
         logger.error(f"Attribute validation error: {ve}")
-        return f"""Error in attribute validation: {str(ve)}
+        raise ToolExecutionError(
+            "advanced_search",
+            f"""Error in attribute validation: {str(ve)}
 
 Please check attribute names, operators, and values against {DATASTORE_NAME} metadata
 using the get_attribute_selection_context or get_valid_types tools.
-"""
-
+""",
+        )
     # Process modifiers: convert status-based modifiers to exclusions, keep summary modifiers in attributes
     if attributes is not None:
         attributes = process_modifiers(attributes)
@@ -154,11 +160,14 @@ using the get_attribute_selection_context or get_valid_types tools.
         if taxa_length_before == 0:
             taxon_filter_type = "matching"
         elif taxon_filter_type != "matching":
-            return """Error: prefixed names in 'names' (e.g., 'common name:dog') cannot be used
+            raise ToolExecutionError(
+                "advanced_search",
+                """Error: prefixed names in 'names' (e.g., 'common name:dog') cannot be used
             alongside regular taxon names in 'taxa' unless taxon_filter_type is set to 'matching'.
 
             Please check with the user and retry the call with taxon_filter_type='matching' ONLY if
-            it is valid to do so."""
+            it is valid to do so.""",
+            )
 
     names = filtered_names
     taxa = (taxa or []) + extra_taxa
@@ -197,14 +206,19 @@ using the get_attribute_selection_context or get_valid_types tools.
     # Make API request
     data = await make_api_request(api_url)
 
-    # Format response based on what was queried
     if show_table:
         if not data or "results" not in data:
-            return f"Unable to fetch results or no results found for URL: {api_url}."
+            raise ToolExecutionError(
+                "advanced_search",
+                f"Unable to fetch results or no results found for URL: {api_url}.",
+            )
         count = data.get("status", {}).get("hits", 0)
     else:
         if not data or "count" not in data:
-            return f"Unable to fetch count or no count found for URL: {api_url}."
+            raise ToolExecutionError(
+                "advanced_search",
+                f"Unable to fetch count or no count found for URL: {api_url}.",
+            )
         count = data.get("count", 0)
 
     # Build user-facing URL
@@ -225,45 +239,15 @@ using the get_attribute_selection_context or get_valid_types tools.
     if attributes:
         description += " matching the specified attributes"
 
-    table = ""
-    if show_table and "results" in data:
-        table = format_result_table(
-            data["results"],
-            search_fields=fields or [],
-            search_names=names or [],
-            search_ranks=ranks or [],
-            search_url=search_url,
-        )
-
-    result = f"""
-According to {DATASTORE_NAME}, there are {description}.
-
-This count is based on data from the NCBI taxonomy,
-supplemented by additional metadata from the {DATASTORE_NAME} database.
-"""
-
-    if show_table:
-        result += f"""
-
-This table shows the top {size} results.
-
-{table}
-"""
-    if show_sources: result += """
-
-Sources were requested, but this is currently a placeholder.
-In the future, this section will include a summary of the data sources that contributed to the results,
-such as which databases or datasets were used, and how many records came from each source.
-
-"""
-
-    result += f"""
-
-Explore these results in the {DATASTORE_NAME} web interface:
-{search_url}
-"""
-
-    return result
+    return {
+        "count": count,
+        "description": description,
+        "url": search_url,
+        "search_index": search_index,
+        "query_url": api_url,
+        "results": data.get("results", []) if show_table else [],
+        "api_response": data,
+    }
 
 
 def register_tools(mcp) -> None:

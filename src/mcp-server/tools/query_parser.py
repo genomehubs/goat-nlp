@@ -1,18 +1,22 @@
 """Query parser tool for extracting structured query components from user questions."""
 
+import time
 from typing import Any
 
 from ..config import DATASTORE_NAME
-from ..logging_config import get_logger
+from ..logging_config import get_logger, log_tool_usage
 from .artifact_store import retrieve
 from .helpers.constants import FIELD_CACHE
 from .helpers.errors import (
+    ToolExecutionError,
     artifact_retrieval_error,
     invalid_intent_error,
     unsupported_intent_error,
 )
 from .helpers.fetch import fetch_valid_types
+from .helpers.formatting import format_result_table, process_result_table
 from .helpers.query import set_search_tips
+from .helpers.search_index import resolve_index
 from .helpers.validation import validate_attribute_name
 
 logger = get_logger(__name__)
@@ -69,7 +73,7 @@ async def submit_query(
     identifiers_artifact_id: str,
     attributes_artifact_id: str,
     intent: str,
-    search_index: str = "taxon",
+    search_index: str | None = None,
     sort_by: str | None = None,
     sort_order: str | None = None,
     size: int | None = None,
@@ -98,86 +102,182 @@ async def submit_query(
         - For intent="sources": count and list of data sources
     """
 
-    # If artifact tokens were provided (string), attempt to retrieve stored objects
-    if isinstance(identifiers_artifact_id, str):
-        identifiers_output = retrieve(identifiers_artifact_id)
-    if isinstance(attributes_artifact_id, str):
-        attributes_output = retrieve(attributes_artifact_id)
+    start = time.time()
 
-    if not isinstance(identifiers_output, dict):
-        raise ValueError(artifact_retrieval_error("identifiers", "submit_query"))
-    if not isinstance(attributes_output, dict):
-        raise ValueError(artifact_retrieval_error("attributes", "submit_query"))
+    user_query = "unknown"
 
-    if intent not in {"count", "sources", "table"}:
-        if intent in {"histogram", "scatter", "tree", "donut", "rainbow"}:
-            raise ValueError(unsupported_intent_error(intent, "submit_query", "get_report()"))
+    result = "not reached"
+
+    try:
+
+        # If artifact tokens were provided (string), attempt to retrieve stored objects
+        if isinstance(identifiers_artifact_id, str):
+            identifiers_output = retrieve(identifiers_artifact_id)
+        if isinstance(attributes_artifact_id, str):
+            attributes_output = retrieve(attributes_artifact_id)
+
+        if not isinstance(identifiers_output, dict):
+            raise ValueError(artifact_retrieval_error("identifiers", "submit_query"))
+        if not isinstance(attributes_output, dict):
+            raise ValueError(artifact_retrieval_error("attributes", "submit_query"))
+
+        search_index = resolve_index(search_index, identifiers_output, attributes_output)
+
+        if intent not in {"count", "sources", "table"}:
+            if intent in {"histogram", "scatter", "tree", "donut", "rainbow"}:
+                raise ValueError(unsupported_intent_error(intent, "submit_query", "get_report()"))
+            else:
+                raise ValueError(invalid_intent_error(intent, {"count", "table", "sources"}, "submit_query"))
+
+        taxa = identifiers_output.get("taxa", [])
+        assemblies = identifiers_output.get("assemblies", [])
+        samples = identifiers_output.get("samples", [])
+        taxon_filter_type = identifiers_output.get("taxon_filter_type", "children")
+        rank = identifiers_output.get("rank")
+        user_query = identifiers_output.get("user_query", "unknown")
+
+        show_table = intent == "table"
+        show_sources = intent == "sources"
+
+        if show_table:
+            if size is None:
+                size = 10  # Default size for tables
+            if sort_by:
+                try:
+                    sort_by = sort_by.split(" ")[0].split(".")[0].split(":")[0]
+                    await fetch_valid_types(search_index)
+                    validate_attribute_name(sort_by, search_index, FIELD_CACHE)
+                except ValueError as ve:
+                    raise ValueError(
+                        f"""Error in sort_by attribute validation: {str(ve)}"""
+                    ) from ve
+
+        attributes = attributes_output.get("attributes", [])
+        fields = attributes_output.get("fields", [])
+        names = attributes_output.get("names", [])
+        ranks = attributes_output.get("ranks", [])
+
+        # Import here to avoid circular dependency
+        from .search import advanced_search
+
+        # Delegate to advanced_search with the parsed components
+        result = await advanced_search(
+            user_query=user_query,
+            search_index=search_index,
+            taxa=taxa,
+            taxon_filter_type=taxon_filter_type,
+            assemblies=assemblies,
+            samples=samples,
+            rank=rank,
+            attributes=attributes,
+            fields=fields,
+            names=names,
+            ranks=ranks,
+            show_table=show_table,
+            show_sources=show_sources,
+            size=size if show_table else None,
+            sort_by=sort_by if show_table else None,
+            sort_order=sort_order if show_table else None,
+            page=page if show_table else None,
+        )
+
+        count = result.get("count", 0)
+
+        if count > 0 and show_table and "results" in result:
+            processed_table = process_result_table(
+                result.get("results", []),
+                search_fields=fields or [],
+                search_names=names or [],
+                search_ranks=ranks or [],
+            )
+            result["csv"] = format_result_table(
+                processed_table=processed_table,
+                search_url=result.get("url", ""),
+                format="csv",
+            )
+            result["markdown"] = format_result_table(
+                processed_table=processed_table,
+                search_url=result.get("url", ""),
+                format="markdown",
+            )
         else:
-            raise ValueError(invalid_intent_error(intent, {"count", "table", "sources"}, "submit_query"))
+            result["csv"] = ""
+            result["markdown"] = ""
 
-    taxa = identifiers_output.get("taxa", [])
-    assemblies = identifiers_output.get("assemblies", [])
-    samples = identifiers_output.get("samples", [])
-    taxon_filter_type = identifiers_output.get("taxon_filter_type", "children")
-    rank = identifiers_output.get("rank")
-    user_query = identifiers_output.get("user_query", "")
+        search_tips = set_search_tips(
+            attributes,
+            fields,
+            intent,
+        )
 
-    show_table = intent == "table"
-    show_sources = intent == "sources"
+        # Log successful call
+        duration_ms = (time.time() - start) * 1000
+        log_tool_usage(
+            tool_name="submit_query",
+            params={
+                "intent": intent,
+                "search_index": search_index or "default",
+                "identifiers_artifact_id": identifiers_artifact_id,
+                "attributes_artifact_id": attributes_artifact_id,
+            },
+            duration_ms=duration_ms,
+            success=True,
+            result_summary={
+                "count": result.get("count", 0),
+                "has_results": bool(result.get("results")),
+            }
+        )
 
-    if show_table:
-        if size is None:
-            size = 10  # Default size for tables
-        if sort_by:
-            try:
-                sort_by = sort_by.split(" ")[0].split(".")[0].split(":")[0]
-                await fetch_valid_types(search_index)
-                validate_attribute_name(sort_by, search_index, FIELD_CACHE)
-            except ValueError as ve:
-                raise ValueError(
-                    f"""Error in sort_by attribute validation: {str(ve)}"""
-                ) from ve
+        return {
+            "user_query": user_query,
+            "result": result,
+            "search_tips": search_tips,
+        }
 
-    attributes = attributes_output.get("attributes", [])
-    fields = attributes_output.get("fields", [])
-    names = attributes_output.get("names", [])
-    ranks = attributes_output.get("ranks", [])
+    except ToolExecutionError as e:
+        duration_ms = (time.time() - start) * 1000
+        log_tool_usage(
+            tool_name="submit_query",
+            params={
+                "intent": intent,
+                "search_index": search_index or "default",
+                "identifiers_artifact_id": identifiers_artifact_id,
+                "attributes_artifact_id": attributes_artifact_id,
+            },
+            duration_ms=duration_ms,
+            success=False,
+            error=str(e)
+        )
 
-    # Import here to avoid circular dependency
-    from .search import advanced_search
+        return {
+            "error": e.message,
+            "error_type": "handled",
+            "error_tool": e.tool_name,
+            "user_query": user_query or "unknown",
+        }
 
-    # Delegate to advanced_search with the parsed components
-    result = await advanced_search(
-        user_query=user_query,
-        search_index=search_index,
-        taxa=taxa,
-        taxon_filter_type=taxon_filter_type,
-        assemblies=assemblies,
-        samples=samples,
-        rank=rank,
-        attributes=attributes,
-        fields=fields,
-        names=names,
-        ranks=ranks,
-        show_table=show_table,
-        show_sources=show_sources,
-        size=size if show_table else None,
-        sort_by=sort_by if show_table else None,
-        sort_order=sort_order if show_table else None,
-        page=page if show_table else None,
-    )
+    except Exception as e:
+        # Log error
+        duration_ms = (time.time() - start) * 1000
+        logger.exception("Unexpected error in submit_query")
+        log_tool_usage(
+            tool_name="submit_query",
+            params={
+                "intent": intent,
+                "search_index": search_index or "default",
+                "identifiers_artifact_id": identifiers_artifact_id,
+                "attributes_artifact_id": attributes_artifact_id,
+            },
+            duration_ms=duration_ms,
+            success=False,
+            error=str(e)
+        )
 
-    search_tips = set_search_tips(
-        attributes,
-        fields,
-        intent,
-    )
-
-    return {
-        "user_query": user_query,
-        "result": result,
-        "search_tips": search_tips,
-    }
+        return {
+            "error": str(e),
+            "error_type": "unhandled",
+            "user_query": user_query or "unknown"
+        }
 
 
 # Set the runtime docstring / tool description to the selected LLM prompt.

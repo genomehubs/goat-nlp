@@ -15,6 +15,10 @@ logger = get_logger(__name__)
 
 GET_REPORT_PROMPT = f"""Generate {DATASTORE_NAME} reports with different visualisation types.
 
+IMPORTANT: This tool is for generating visual reports (e.g., histograms, scatter
+plots, trees) based on query results. If you just want to get raw data or counts,
+use submit_query() instead.
+
 CHOOSE YOUR REPORT TYPE AND PROVIDE THE REQUIRED PARAMETERS:
 
 **DISTRIBUTION REPORTS** (show data across axes):

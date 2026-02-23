@@ -1,4 +1,5 @@
 import inspect
+import uuid
 from pathlib import Path
 from typing import Any, Dict
 
@@ -11,7 +12,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import FileResponse, HTMLResponse, JSONResponse
 
 from .config import BROWSER_PAGE_CONFIG, LOGO_FILE, SITE_NAME
-from .logging_config import get_logger
+from .logging_config import get_logger, set_trace_id
 from .prompts.system import get_multi_stage_prompt
 from .tools import register_all_tools
 
@@ -60,6 +61,25 @@ class BrowserFriendlyMCPMiddleware(BaseHTTPMiddleware):
 
         # For everything else, continue to next middleware/handler
         return await call_next(request)
+
+
+# Middleware to set trace_id for all requests (if not already set by client)
+class TraceIDMiddleware(BaseHTTPMiddleware):
+    """Middleware to set trace_id for each request."""
+
+    async def dispatch(self, request: Request, call_next):
+        # Extract trace_id from request headers, or generate new one
+        trace_id = request.headers.get("X-Trace-ID")
+        if not trace_id:
+            trace_id = str(uuid.uuid4())
+
+        # Set in context for all downstream tool calls
+        set_trace_id(trace_id)
+
+        response = await call_next(request)
+        # Optionally include trace_id in response headers
+        response.headers["X-Trace-ID"] = trace_id
+        return response
 
 
 # Initialize FastMCP server
@@ -152,8 +172,11 @@ def main():
     # This ensures it runs before FastMCP's internal routing
     app = mcp.http_app(transport="streamable-http")
 
-    # Wrap the app with our browser-friendly middleware
-    wrapped_app = BrowserFriendlyMCPMiddleware(app)
+    # Wrap with middlewares in order (outermost first)
+    # TraceIDMiddleware runs first, setting trace_id in context
+    wrapped_app = TraceIDMiddleware(app)
+    # BrowserFriendlyMCPMiddleware runs second, can use trace_id if needed
+    wrapped_app = BrowserFriendlyMCPMiddleware(wrapped_app)
 
     # Run the wrapped app
     import uvicorn

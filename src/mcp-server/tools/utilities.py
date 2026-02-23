@@ -1,8 +1,8 @@
-import re
 import time
 
 from ..config import API_BASE, DATASTORE_NAME, WEB_URL
 from .helpers.api import make_api_request
+from .helpers.search_index import infer_index_from_query
 
 RANK_CACHE: list[str] = []
 _RANK_CACHE_TIMESTAMP: float = 0.0
@@ -39,64 +39,7 @@ async def get_valid_ranks() -> list[str]:
     return await fetch_valid_ranks()
 
 
-async def get_example_queries(category: str = "all") -> str:
-    f"""Get example queries to demonstrate {DATASTORE_NAME} capabilities.
-
-    Use this tool to help users understand what kinds of questions they can ask.
-    If resources are sorted then prefer the get_example_queries_resource resource.
-
-    CRITICAL: The LLM MUST use this tool to answer requests for example queries.
-
-    IMPORTANT: The LLM should present the example queries as the user would type them
-    and only show the examples relevant to the requested category.
-
-    If no category is specified, return basic examples and prompt the user that they
-    can specify a category to see more examples.
-
-    Args:
-        category: Type of examples to show:
-            - "all": Show all examples
-            - "basic": Simple counting queries
-            - "target_lists": Queries about sequencing projects
-            - "assembly": Assembly quality queries
-            - "taxonomy": Taxonomic and lineage queries
-            - "advanced": Complex searches
-    """
-    examples = {
-        "basic": f"""**Basic Counting Queries:**
-- How many species are in {DATASTORE_NAME}?
-- How many bat families are targeted by the VGP?
-- How many cat species are missing genome size data?""",
-
-        "target_lists": """**Target Lists and Projects:**
-- Which species are on both the DToL and CANBP long lists?
-- Which species are on the DToL target list?
-- What are the bioprojects for bats?""",
-
-        "assembly": """**Assembly Quality Queries:**
-- Which species with chromosomal or better assemblies have over 10Mb contig N50?
-- Show me a table of contig and scaffold N50 for all cat assemblies, sorted by contig N50
-- How many assemblies have chromosome-level quality?""",
-
-        "taxonomy": """**Taxonomic Queries:**
-- What is the lineage for the banded snail?
-- How many assemblies are there for species in the cat and dog families?
-- What target lists are cats on?""",
-
-        "advanced": """**Advanced Searches:**
-- How many species have a ToLID prefix beginning with ilLys?
-- How many have ToLID prefixes ending with cori?
-- Which attributes support ordered keyword searches?
-- Which species are on both the DToL and CANBP long lists?"""
-    }
-
-    if category == "all":
-        return "\n\n".join(examples.values())
-
-    return examples.get(category, "Unknown category. Valid categories: " + ", ".join(examples.keys()))
-
-
-async def choose_search_index(query: str) -> str:
+async def choose_search_index(query: str) -> dict:
     f"""Choose the appropriate {DATASTORE_NAME} search index based on what is being counted/listed.
 
     CRITICAL: Choose the index based on what the user wants to COUNT or LIST, not what
@@ -134,63 +77,12 @@ async def choose_search_index(query: str) -> str:
     If uncertain, default to 'taxon' as most queries are taxonomic.
 
     Args:
-        query: The user's full query to analyze
+        query: The user's full query to analyse
+
+    Returns:
+        dict with keys: search_index (one of "taxon", "assembly", "sample"), reasoning (explanation of choice)
     """
-    query_lower = query.lower()
-
-    # Look for what is being counted/listed
-    # Assembly index: explicitly counting assemblies
-    # Patterns for assembly index, including those with words between "how many"/"count"/etc. and "assemblies"
-    assembly_patterns = [
-        "how many assemblies",
-        "count assemblies",
-        "list assemblies",
-        "which assemblies",
-        "show assemblies",
-        "assemblies for",
-        "assemblies with",
-    ]
-
-    # Regex patterns to catch phrases like "how many ___ assemblies", "count the ___ assemblies", etc.
-    assembly_regexes = [
-        r"how many\s+\w+(?:\s+\w+){0,5}?\s+assemblies",  # up to 5 words between
-        r"count(?: the)?\s+\w+(?:\s+\w+){0,5}?\s+assemblies",
-        r"list(?: the)?\s+\w+(?:\s+\w+){0,5}?\s+assemblies",
-        r"which\s+\w+(?:\s+\w+){0,5}?\s+assemblies",
-        r"show(?: me)?(?: the)?\s+\w+(?:\s+\w+){0,5}?\s+assemblies",
-    ]
-    if any(pattern in query_lower for pattern in assembly_patterns):
-        return "assembly"
-    if any(re.search(regex, query_lower) for regex in assembly_regexes):
-        return "assembly"
-    if any(pattern in query_lower for pattern in assembly_patterns):
-        return "assembly"
-
-    # Sample index: explicitly counting samples
-    sample_patterns = [
-        "how many samples",
-        "count samples",
-        "list samples",
-        "which samples",
-        "show samples",
-        "samples for",
-        "samples with",
-    ]
-    if any(pattern in query_lower for pattern in sample_patterns):
-        return "sample"
-    # Regex patterns to catch phrases like "how many ___ samples", "count the ___ samples", etc.
-    sample_regexes = [
-        r"how many\s+\w+(?:\s+\w+){0,5}?\s+samples",  # up to 5 words between
-        r"count(?: the)?\s+\w+(?:\s+\w+){0,5}?\s+samples",
-        r"list(?: the)?\s+\w+(?:\s+\w+){0,5}?\s+samples",
-        r"which\s+\w+(?:\s+\w+){0,5}?\s+samples",
-        r"show(?: me)?(?: the)?\s+\w+(?:\s+\w+){0,5}?\s+samples",
-    ]
-    return (
-        "sample"
-        if any(re.search(regex, query_lower) for regex in sample_regexes)
-        else "taxon"
-    )
+    return infer_index_from_query(query)
 
 
 async def check_taxon_exists(name: str, response_format: str = "data") -> dict:
@@ -295,5 +187,5 @@ def register_tools(mcp) -> None:
     """
     mcp.tool()(choose_search_index)
     mcp.tool()(check_taxon_exists)
-    mcp.tool()(get_example_queries)
+    mcp.tool()(get_valid_ranks)
     mcp.tool()(get_valid_ranks)

@@ -9,6 +9,15 @@ class LLMError(Exception):
     pass
 
 
+class ToolExecutionError(LLMError):
+    """Handled tool error that callers can distinguish from unexpected exceptions."""
+
+    def __init__(self, tool_name: str, message: str):
+        super().__init__(message)
+        self.tool_name = tool_name
+        self.message = message
+
+
 # Artifact errors
 def artifact_retrieval_error(artifact_type: str, tool_name: str) -> str:
     """Reusable message for invalid artifact retrieval."""

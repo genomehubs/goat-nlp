@@ -98,27 +98,29 @@ def format_record(record: dict, url: str, attributes: list[str] | None = None, t
     return "\n".join(lines)
 
 
-def format_result_table(
+def process_result_table(
     results: list[dict],
     search_fields: list[str],
     search_names: list[str],
     search_ranks: list[str],
-    search_url: str,
-) -> str:
-    f"""Format search results as a markdown table with context.
+) -> dict:
+    """Process a search results table ready for formatting.
 
     Args:
         results: List of result records
         search_fields: List of fields to include in the table
         search_names: List of taxon name classes to include
         search_ranks: List of taxonomic ranks to include
-        search_url: {DATASTORE_NAME} web interface URL
 
     Returns:
-        Formatted markdown string with summary and table
+        Dict with processed table data ready for formatting
+        {{
+            "columns": [...],
+            "rows": [{{column_name: {{"value": processed_value, "raw_value": value, "flag": flag}}, ...}}, ...]
+        }}
     """
     if not results:
-        return f"No results found.\n\nExplore in {DATASTORE_NAME}: {search_url}"
+        return {"columns": [], "rows": []}
 
     columns = []
 
@@ -127,7 +129,7 @@ def format_result_table(
     flags = 0
     for result in results:
         record = result.get("result", {})
-        row_values = []
+        row_values = {}
         if not columns:
             # Determine columns from first record
             columns.extend(key for key in record.keys() if key.endswith("_id"))
@@ -154,9 +156,6 @@ def format_result_table(
                 columns.extend(iter(search_names))
             if search_ranks:
                 columns.extend(iter(search_ranks))
-            # Build header
-            header = "| " + " | ".join(columns) + " |"
-            separator = "| " + " | ".join(["---"] * len(columns)) + " |"
 
         fields = record.get("fields", {})
         names = record.get("names", {})
@@ -164,10 +163,14 @@ def format_result_table(
         for col in columns:
             flag = False
             # Handle different field types
+            value = None
+            raw_value = None
             if record.get(col) is not None:
                 value = record.get(col)
+                raw_value = value
             elif col in fields and fields[col] is not None:
-                attr_value = fields[col].get("value", "N/A")
+                raw_value = fields[col].get("value")
+                attr_value = raw_value or "N/A"
                 if "ancestor" in fields[col].get("aggregation_source", []):
                     flag = True
                     flags += 1
@@ -181,9 +184,11 @@ def format_result_table(
                 else:
                     value = str(attr_value)
             elif col in search_names:
-                value = ", ".join(names.get(col, {}).get("name", ["N/A"]))
+                raw_value = names.get(col, {}).get("name",)
+                value = ", ".join(raw_value) if raw_value else "N/A"
             elif col in search_ranks:
-                value = ranks.get(col, {}).get("scientific_name", "N/A")
+                raw_value = ranks.get(col, {}).get("scientific_name")
+                value = raw_value or "N/A"
             else:
                 value = "N/A"
 
@@ -191,23 +196,82 @@ def format_result_table(
             if len(str(value)) > 50:
                 value = f"{str(value)[:47]}..."
 
-            if flag:
-                value = f"{value} (Ancestral)"
+            row_values[col] = {"value": value, "raw_value": raw_value, "flag": flag}
 
-            row_values.append(str(value))
+        rows.append(row_values)
 
-        rows.append("| " + " | ".join(row_values) + " |")
+    return {"columns": columns, "rows": rows, "flags": flags}
 
-    # Assemble table
-    table = "\n".join([header, separator] + rows)
-    flag_note = (
-        "\n\n(Note: Values marked with '(Ancestral)' are inferred from ancestral data.)"
-        if flags > 0
-        else ""
-    )
-    return f"""Here are the top results:
+
+def format_result_table(
+    processed_table: dict,
+    search_url: str,
+    format: str = "markdown",
+) -> str:
+    f"""Format processed search results as a table with context.
+
+    Args:
+        processed_table: Dict with processed table data from process_result_table()
+        search_url: {DATASTORE_NAME} web interface URL
+        format: Output format - "markdown" or "csv"
+
+    Returns:
+        Formatted table
+    """
+    columns = processed_table.get("columns", [])
+    rows = processed_table.get("rows", [])
+    flags = processed_table.get("flags", 0)
+    if not columns or not rows:
+        return "No results to display."
+    if format not in {"markdown", "csv"}:
+        return "Invalid format specified for result table."
+    if format == "markdown":
+        # Build header
+        header = "| " + " | ".join(columns) + " |"
+        separator = "| " + " | ".join(["---"] * len(columns)) + " |"
+
+        # Build rows
+        row_strings = []
+        for row in rows:
+            row_values = []
+            for col in columns:
+                cell = row.get(col, {})
+                value = cell.get("value", "N/A")
+                flag = cell.get("flag", False)
+                if flag:
+                    value = f"{value} (Ancestral)"
+                row_values.append(str(value))
+            row_strings.append("| " + " | ".join(row_values) + " |")
+
+        table = "\n".join([header, separator] + row_strings)
+        flag_note = (
+            "\n\n(Note: Values marked with '(Ancestral)' are inferred from ancestral data.)"
+            if flags > 0
+            else ""
+        )
+        return f"""Here are the top results:
 {table}{flag_note}
+Explore these results in the {DATASTORE_NAME} web interface:
+{search_url}
 """
+    elif format == "csv":
+        import csv
+        import io
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(columns)
+        for row in rows:
+            row_values = []
+            for col in columns:
+                cell = row.get(col, {})
+                value = cell.get("raw_value", "N/A")
+                flag = cell.get("flag", False)
+                if flag:
+                    value = f"{value} (Ancestral)"
+                row_values.append(str(value))
+            writer.writerow(row_values)
+        return output.getvalue()
 
 
 def format_sources_report(report_data: dict, search_url: str) -> str:

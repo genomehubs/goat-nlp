@@ -37,7 +37,6 @@ BROWSER_PAGE_CONFIG = {
         {"name": "process_attributes", "description": "Validate attribute filters and fields"},
         {"name": "submit_query", "description": f"Execute searches against {DATASTORE_FULL_NAME}"},
         {"name": "check_taxon_exists", "description": "Validate taxonomic names"},
-        {"name": "get_example_queries", "description": "Get curated example queries"},
     ],
 
     # Developer links

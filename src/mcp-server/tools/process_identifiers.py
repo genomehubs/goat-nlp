@@ -1,11 +1,13 @@
 """Process identifiers tool for preparing identifier-related query parameters."""
 
+import time
 from typing import Any
 
 from ..config import DATASTORE_NAME
-from ..logging_config import get_logger
+from ..logging_config import get_logger, log_tool_usage
 from .helpers.normalisation import normalise_to_list
 from .helpers.processor_common import finalise_and_store
+from .helpers.search_index import infer_index_from_query
 from .helpers.validation import validate_prefixes
 
 logger = get_logger(__name__)
@@ -86,7 +88,8 @@ async def process_identifiers(
     samples: list[str] | None = None,
     rank: str | None = None,
     taxon_filter_type: str = "children",
-    search_index: str = "taxon",
+    search_index: str | None = None,
+    trace_id: str | None = None,
 ) -> dict[str, Any]:
     f"""Process and validate identifier-related query parameters.
 
@@ -103,31 +106,100 @@ async def process_identifiers(
     Returns:
         A dictionary with processed identifiers for {DATASTORE_NAME} API queries.
 """
-    # Normalise all inputs to lists
-    taxa = normalise_to_list(taxa)
-    assemblies = normalise_to_list(assemblies)
-    samples = normalise_to_list(samples)
+    start = time.time()
 
-    if taxa and not validate_prefixes(taxa, "taxa"):
-        raise ValueError("Taxa identifiers must be valid scientific names or IDs.")
-    if assemblies and not validate_prefixes(assemblies, "assemblies"):
-        raise ValueError("Assembly identifiers must be valid accessions like GCF_000002305.6.")
-    if samples and not validate_prefixes(samples, "samples"):
-        raise ValueError("Sample identifiers must be valid accessions like SRR1234567.")
+    try:
+        # Normalise all inputs to lists
+        taxa = normalise_to_list(taxa)
+        assemblies = normalise_to_list(assemblies)
+        samples = normalise_to_list(samples)
 
-    # Clean and encode taxa (handle exclamation marks for NOT filters)
-    taxa = [t.strip().replace("!", "%21") for t in taxa if t.strip() != ""]
+        if not search_index:
+            search_index_dict = infer_index_from_query(user_query)
+            search_index = search_index_dict["search_index"]
+            logger.info(f"Inferred search index '{search_index}' from user query: {search_index_dict['reasoning']}")
+        else:
+            search_index_dict = {"search_index": search_index, "reasoning": "Explicitly provided as argument"}
+            logger.info(f"Using provided search index '{search_index}' for processing attributes.")
 
-    result: dict[str, Any] = {
-        "taxa": taxa,
-        "assemblies": assemblies,
-        "samples": samples,
-        "rank": rank if rank is not None else "",
-        "taxon_filter_type": taxon_filter_type,
-        "user_query": user_query,
-    }
+        if taxa and not validate_prefixes(taxa, "taxa"):
+            raise ValueError("Taxa identifiers must be valid scientific names or IDs.")
+        if assemblies and not validate_prefixes(assemblies, "assemblies"):
+            raise ValueError("Assembly identifiers must be valid accessions like GCF_000002305.6.")
+        if samples and not validate_prefixes(samples, "samples"):
+            raise ValueError("Sample identifiers must be valid accessions like SRR1234567.")
 
-    return finalise_and_store(result)
+        # Clean and encode taxa (handle exclamation marks for NOT filters)
+        taxa = [t.strip().replace("!", "%21") for t in taxa if t.strip() != ""]
+
+        if search_index != "taxon" and rank is not None and rank not in {"", "subspecies", "species"}:
+            raise ValueError(
+                f"The rank '{rank}' is not valid for search index '{search_index}'. "
+                f"The {search_index} search_index only supports 'subspecies' and 'species' ranks.")
+
+        result: dict[str, Any] = {
+            "taxa": taxa,
+            "assemblies": assemblies,
+            "samples": samples,
+            "rank": rank if rank is not None else "",
+            "taxon_filter_type": taxon_filter_type,
+            "user_query": user_query,
+            "search_index": search_index,
+        }
+
+        stored_result = finalise_and_store(result)
+        log_tool_usage(
+            tool_name="process_identifiers",
+            params=result,
+            duration_ms=None,
+            success=True,
+            error=None,
+            result_summary={"artifact_id": stored_result["artifact_id"]}
+        )
+
+        # Log successful call
+        duration_ms = (time.time() - start) * 1000
+        log_tool_usage(
+            tool_name="process_identifiers",
+            params={
+                "search_index": search_index,
+                "taxon_filter_type": taxon_filter_type,
+                "has_taxa": bool(taxa),
+                "has_assemblies": bool(assemblies),
+                "has_samples": bool(samples),
+                "num_taxa": len(taxa) if taxa else 0,
+                "num_assemblies": len(assemblies) if assemblies else 0,
+                "num_samples": len(samples) if samples else 0,
+            },
+            duration_ms=duration_ms,
+            success=True,
+            result_summary={
+                "artifact_id": result.get("artifact_id"),
+                "num_identifiers": (len(taxa or []) + len(assemblies or []) + len(samples or [])),
+            }
+        )
+
+        return {**result, "artifact_id": stored_result["artifact_id"]}
+    
+    except Exception as e:
+        duration_ms = (time.time() - start) * 1000
+        logger.exception("Error in process_identifiers")
+        log_tool_usage(
+            tool_name="process_identifiers",
+            params={
+                "search_index": search_index,
+                "has_taxa": bool(taxa),
+                "has_assemblies": bool(assemblies),
+                "has_samples": bool(samples),
+            },
+            duration_ms=duration_ms,
+            success=False,
+            error=str(e)
+        )
+        return {
+            "error": str(e),
+            "user_query": user_query or "unknown",
+        }
 
 
 process_identifiers.__doc__ = PROCESS_IDENTIFIERS_PROMPT

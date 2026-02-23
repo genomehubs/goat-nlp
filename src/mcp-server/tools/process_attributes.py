@@ -1,13 +1,15 @@
 """Process attributes tool for preparing attribute-related query parameters."""
 
+import time
 from typing import Any
 
 from ..config import DATASTORE_NAME
-from ..logging_config import get_logger
+from ..logging_config import get_logger, log_tool_usage
 from .helpers.constants import FIELD_CACHE
 from .helpers.errors import invalid_attribute_error
 from .helpers.fetch import fetch_valid_types
 from .helpers.processor_common import finalise_and_store
+from .helpers.search_index import infer_index_from_query
 from .helpers.validation import validate_attributes
 from .utilities import fetch_valid_ranks
 
@@ -18,6 +20,8 @@ PROCESS_ATTRIBUTES_PROMPT = (
 
 Follow the procedure below to extract and format the attributes correctly. Ignore any other information, this
 will be handled in other steps.
+
+Call choose_search_index() first when index is not explicitly clear from the user query.
 
 If successful, this tool returns an artifact token that can be passed to submit_query().
 
@@ -140,7 +144,8 @@ async def process_attributes(
     user_query: str,
     names: list[str] | None = None,
     ranks: list[str] | None = None,
-    search_index: str = "taxon",
+    search_index: str | None = None,
+    trace_id: str | None = None,
 ) -> dict[str, Any]:
     """Process and validate attribute-related query parameters.
 
@@ -156,115 +161,176 @@ async def process_attributes(
         A dictionary with processed attributes for {DATASTORE_NAME} API queries.
 """
 
-    valid_names = {"scientific_name", "common_name", "synonym", "tolid_prefix", "authority"}
-    if names:
-        for name in names:
-            prefix = name.split(":", 1)[0] if ":" in name else name
-            if prefix not in valid_names:
-                raise ValueError(invalid_attribute_error(name, "name", valid_names))
-
-    if ranks:
-        valid_ranks = await fetch_valid_ranks()
-        for rank in ranks:
-            if rank not in valid_ranks:
-                raise ValueError(invalid_attribute_error(rank, "rank", valid_ranks))
-
-    filtered_fields = []
-    names = names or []
-    ranks = ranks or []
-    for f in fields:
-        name = f.get("name")
-        if name and name not in names and name not in ranks:
-            filtered_fields.append(f)
-    fields = filtered_fields
-
-    # Populate FIELD_CACHE before validation
-    await fetch_valid_types(search_index)
+    start = time.time()
 
     try:
-        if attributes:
-            nameless_attributes = []
-            for attr in attributes:
-                if attr.get("name", "") in valid_names:
-                    if attr.get("value") is not None:
-                        values = attr["value"]
-                        if not isinstance(values, list):
-                            values = [values]
-                        values = [str(v).replace("* ", "*").replace(" *", "*") for v in values]
-                        if attr.get("operator", "") in {"not in", "!="}:
-                            # prepend '!' to each value for negation
-                            values = [f"!{v}" for v in values]
-                        names.append(f"{attr['name']}:{','.join(values)}")
+        if not search_index:
+            search_index_dict = infer_index_from_query(user_query)
+            search_index = search_index_dict["search_index"]
+            logger.info(f"Inferred search index '{search_index}' from user query: {search_index_dict['reasoning']}")
+        else:
+            search_index_dict = {"search_index": search_index, "reasoning": "Explicitly provided as argument"}
+            logger.info(f"Using provided search index '{search_index}' for processing attributes.")
+
+        valid_names = {"scientific_name", "common_name", "synonym", "tolid_prefix", "authority"}
+        if names:
+            for name in names:
+                prefix = name.split(":", 1)[0] if ":" in name else name
+                if prefix not in valid_names:
+                    raise ValueError(invalid_attribute_error(name, "name", valid_names))
+
+        if ranks:
+            valid_ranks = await fetch_valid_ranks()
+            for rank in ranks:
+                if rank not in valid_ranks:
+                    raise ValueError(invalid_attribute_error(rank, "rank", valid_ranks))
+
+        filtered_fields = []
+        names = names or []
+        ranks = ranks or []
+        for f in fields:
+            name = f.get("name")
+            if name and name not in names and name not in ranks:
+                filtered_fields.append(f)
+        fields = filtered_fields
+
+        # Populate FIELD_CACHE before validation
+        await fetch_valid_types(search_index)
+
+        try:
+            if attributes:
+                nameless_attributes = []
+                for attr in attributes:
+                    if attr.get("name", "") in valid_names:
+                        if attr.get("value") is not None:
+                            values = attr["value"]
+                            if not isinstance(values, list):
+                                values = [values]
+                            values = [str(v).replace("* ", "*").replace(" *", "*") for v in values]
+                            if attr.get("operator", "") in {"not in", "!="}:
+                                # prepend '!' to each value for negation
+                                values = [f"!{v}" for v in values]
+                            names.append(f"{attr['name']}:{','.join(values)}")
+                        else:
+                            names.append(attr["name"])
+                    elif attr.get("name", "") in ranks:
+                        ranks.append(attr["name"])
                     else:
-                        names.append(attr["name"])
-                elif attr.get("name", "") in ranks:
-                    ranks.append(attr["name"])
-                else:
-                    nameless_attributes.append(attr)
-            attributes = nameless_attributes
-            validate_attributes(attributes, search_index=search_index, field_cache=FIELD_CACHE)
-        if fields:
-            attr_fields = [
-                f for f in (fields or [])
-                if f.get("name") not in valid_names and f.get("name") not in ranks
-            ]
-            validate_attributes(attr_fields, search_index=search_index, field_cache=FIELD_CACHE)
-    except ValueError as e:
-        raise ValueError(
-            f"""Validation error in process_attributes(): {e}
+                        nameless_attributes.append(attr)
+                attributes = nameless_attributes
+                validate_attributes(attributes, search_index=search_index, field_cache=FIELD_CACHE)
+            if fields:
+                attr_fields = [
+                    f for f in (fields or [])
+                    if f.get("name") not in valid_names and f.get("name") not in ranks
+                ]
+                validate_attributes(attr_fields, search_index=search_index, field_cache=FIELD_CACHE)
+        except ValueError as e:
+            raise ValueError(
+                f"""Validation error in process_attributes(): {e}
 
 Ensure attribute and field names are valid for the '{search_index}' index.
 You can check valid attribute names using get_attribute_selection_context()."""
-        ) from e
+            ) from e
 
-    # Ensure fields is a list
-    fields = fields or []
+        # Ensure fields is a list
+        fields = fields or []
 
-    # Build a map of existing fields by name to avoid duplicates and preserve order
-    fields_by_name: dict[str, dict[str, Any]] = {}
-    ordered_field_names: list[str] = []
-    for f in fields:
-        name = f.get("name")
-        if not name:
-            continue
-        mods = f.get("modifier", [])
-        if isinstance(mods, str):
-            mods = [mods]
-        # preserve order and uniqueness
-        mods = list(dict.fromkeys(mods))
-        fields_by_name[name] = {"name": name, "modifier": mods}
-        ordered_field_names.append(name)
-
-    # Merge attributes into fields, adding modifiers without creating duplicates
-    for attr in attributes or []:
-        name = attr.get("name")
-        if not name:
-            continue
-        mods = attr.get("modifier", [])
-        if isinstance(mods, str):
-            mods = [mods]
-
-        if name not in fields_by_name:
-            fields_by_name[name] = {"name": name, "modifier": []}
+        # Build a map of existing fields by name to avoid duplicates and preserve order
+        fields_by_name: dict[str, dict[str, Any]] = {}
+        ordered_field_names: list[str] = []
+        for f in fields:
+            name = f.get("name")
+            if not name:
+                continue
+            mods = f.get("modifier", [])
+            if isinstance(mods, str):
+                mods = [mods]
+            # preserve order and uniqueness
+            mods = list(dict.fromkeys(mods))
+            fields_by_name[name] = {"name": name, "modifier": mods}
             ordered_field_names.append(name)
 
-        existing_mods = fields_by_name[name].setdefault("modifier", [])
-        for m in mods:
-            if m not in existing_mods:
-                existing_mods.append(m)
+        # Merge attributes into fields, adding modifiers without creating duplicates
+        for attr in attributes or []:
+            name = attr.get("name")
+            if not name:
+                continue
+            mods = attr.get("modifier", [])
+            if isinstance(mods, str):
+                mods = [mods]
 
-    # Rebuild the fields list preserving original order, then new fields
-    new_fields: list[dict[str, Any]] = [fields_by_name[name] for name in ordered_field_names]
+            if name not in fields_by_name:
+                fields_by_name[name] = {"name": name, "modifier": []}
+                ordered_field_names.append(name)
 
-    result: dict[str, Any] = {
-        "attributes": attributes,
-        "fields": new_fields,
-        "user_query": user_query,
-        "names": names or [],
-        "ranks": ranks or [],
-    }
+            existing_mods = fields_by_name[name].setdefault("modifier", [])
+            for m in mods:
+                if m not in existing_mods:
+                    existing_mods.append(m)
 
-    return finalise_and_store(result)
+        # Rebuild the fields list preserving original order, then new fields
+        new_fields: list[dict[str, Any]] = [fields_by_name[name] for name in ordered_field_names]
+
+        result: dict[str, Any] = {
+            "attributes": attributes,
+            "fields": new_fields,
+            "user_query": user_query,
+            "names": names or [],
+            "ranks": ranks or [],
+            "search_index": search_index_dict,
+        }
+
+        stored_result = finalise_and_store(result)
+
+        # Log successful call
+        duration_ms = (time.time() - start) * 1000
+        log_tool_usage(
+            tool_name="process_attributes",
+            params={
+                "search_index": search_index,
+                "has_names": bool(names),
+                "has_ranks": bool(ranks),
+                "num_names": len(names) if names else 0,
+                "num_ranks": len(ranks) if ranks else 0,
+                "num_attributes": len(attributes) if attributes else 0,
+                "num_fields": len(fields) if fields else 0,
+                "attribute_names": [attr.get("name") for attr in (attributes or [])],
+                "field_names": [f.get("name") for f in (fields or [])],
+            },
+            duration_ms=duration_ms,
+            success=True,
+            result_summary={
+                "artifact_id": result.get("artifact_id"),
+                "processed_attributes": len(result.get("attributes", [])),
+                "processed_fields": len(new_fields),
+                "total_names": len(names or []),
+                "total_ranks": len(ranks or []),
+            }
+        )
+
+        return {**result, "artifact_id": stored_result["artifact_id"]}
+
+    except Exception as e:
+        duration_ms = (time.time() - start) * 1000
+        logger.exception("Error in process_attributes")
+        log_tool_usage(
+            tool_name="process_attributes",
+            params={
+                "search_index": search_index,
+                "has_names": bool(names),
+                "has_ranks": bool(ranks),
+                "num_attributes": len(attributes) if attributes else 0,
+                "num_fields": len(fields) if fields else 0,
+                "attribute_names": [attr.get("name") for attr in (attributes or [])],
+                "field_names": [f.get("name") for f in (fields or [])],
+            },
+            duration_ms=duration_ms,
+            success=False,
+            error=str(e)
+        )
+        return {"error": str(e),
+                "user_query": user_query or "unknown"}
 
 
 process_attributes.__doc__ = PROCESS_ATTRIBUTES_PROMPT
