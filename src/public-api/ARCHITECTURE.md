@@ -95,9 +95,11 @@
 │           ┌─────────────────────────┐                         │
 │           │   GoaT MCP Server       │                         │
 │           │  • search_goat          │                         │
-│           │  • simple_search          │                         │
+│           │  • simple_search        │                         │
 │           │  • get_goat_report      │                         │
-│           │  • get_attribute_ctx    │                         │
+│           │  • get_attribute_info   │                         │
+│           │  • get_attribute_selection_context  │            │
+│           │    (returns {matches, markdown})     │            │
 │           │  • check_taxon_exists   │                         │
 │           │  • get_goat_record      │                         │
 │           └─────────────────────────┘                         │
@@ -113,7 +115,7 @@
 4. LLM Service creates OpenAI client
 5. OpenAI API called with GoaT MCP tools
 6. GPT-4o mini:
-   - Calls get_attribute_selection_context("chromosome")
+   - Calls get_attribute_selection_context("chromosome") → returns {"matches": [...], "markdown": "..."}
    - Calls search_goat(taxon="Viridiplantae", attributes=[...])
    - Formats natural language answer
 7. Response logged to database (cost: $0.0015)

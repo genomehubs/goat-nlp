@@ -1,8 +1,9 @@
 import re
+import time
 from typing import Any
 
 from ..config import DATASTORE_NAME
-from ..logging_config import get_logger
+from ..logging_config import get_logger, log_tool_usage
 from .helpers.fetch import fetch_valid_types
 from .utilities import fetch_valid_ranks
 
@@ -18,26 +19,67 @@ async def get_valid_types(search_index: str = "taxon") -> dict[str, Any]:
     return await fetch_valid_types(search_index)
 
 
-async def get_metadata_for_attribute(
+async def get_attribute_info(
     attribute: str, search_index: str = "taxon"
-) -> str:
+) -> dict[str, Any]:
     f"""Get metadata for a specific attribute in {DATASTORE_NAME}.
 
-    ONLY use this to get detailed information about a single attribute,
-    such as its description, type, and possible values. If you are unsure if an attribute exists or
+    ONLY use this to get detailed information about a single attribute, such
+    as its description, type, and possible values. If you are unsure if an attribute exists or
     which attributes to use for filtering, use get_attribute_selection_context().
 
     DO NOT use this tool to guess attribute names or validate multiple attributes at once.
+
+    Returns:
+        dict with keys:
+          - "exists": bool
+          - "data": processed attribute dict (or empty dict)
+          - "markdown": formatted string representation (or error message)
 
     Args:
         attribute: Name of the attribute to get metadata for
         search_index: Index type (default: taxon)
     """
-    fields = await fetch_valid_types(search_index) or {}
-    if attribute in fields:
-        return format_processed_attribute(process_attribute(fields[attribute]), "exact", 1, 1)
+    start = time.time()
+    try:
+        fields = await fetch_valid_types(search_index) or {}
+        if attribute in fields:
+            processed = process_attribute(fields[attribute])
+            formatted = format_processed_attribute(processed, "exact", 1, 1)
+            duration_ms = (time.time() - start) * 1000
+            log_tool_usage(
+                tool_name="get_attribute_info",
+                params={"attribute": attribute, "search_index": search_index},
+                duration_ms=duration_ms,
+                success=True,
+                result_summary={
+                    "found": True,
+                    "processed_type": fields[attribute].get("processed_type"),
+                },
+            )
+            return {"exists": True, "data": processed, "markdown": formatted}
 
-    return f"Attribute '{attribute}' not found."
+        duration_ms = (time.time() - start) * 1000
+        msg = f"Attribute '{attribute}' not found."
+        log_tool_usage(
+            tool_name="get_attribute_info",
+            params={"attribute": attribute, "search_index": search_index},
+            duration_ms=duration_ms,
+            success=False,
+            error=msg,
+        )
+        return {"exists": False, "data": {}, "markdown": msg}
+    except Exception as e:
+        duration_ms = (time.time() - start) * 1000
+        log_tool_usage(
+            tool_name="get_attribute_info",
+            params={"attribute": attribute, "search_index": search_index},
+            duration_ms=duration_ms,
+            success=False,
+            error=str(e),
+            exc=e,
+        )
+        raise
 
 
 def extract_modifiers_and_operators(attribute: dict[str, Any]) -> dict[str, Any]:
@@ -169,6 +211,7 @@ async def _get_attribute_context_internal(
     """Internal function to get attribute selection context.
 
     This is called by both the resource and the tool.
+    Returns a dict with keys: 'matches' (list of match dicts) and 'markdown' (formatted string).
     """
 
     # Split keyword into individual words for matching
@@ -177,7 +220,9 @@ async def _get_attribute_context_internal(
 
     fields = await fetch_valid_types(search_index)
     title_attributes = []
+    title_processed: list[dict[str, Any]] = []
     value_attributes = []
+    value_processed: list[dict[str, Any]] = []
     name_attributes = []
     rank_attributes = []
     attributes = []
@@ -202,6 +247,14 @@ async def _get_attribute_context_internal(
                 format_processed_attribute(processed_attribute, name_match_type,
                                            name_match_index, name_match_count)
             )
+            title_processed.append({
+                "type": "attribute",
+                "name": processed_attribute.get("name"),
+                "match_type": name_match_type,
+                "match_index": name_match_index,
+                "match_count": name_match_count,
+                "processed": processed_attribute,
+            })
         value_match_type, value_match_index, value_match_count = find_matches(
             keyword_lower, keyword_words, value_search_text
         )
@@ -210,6 +263,14 @@ async def _get_attribute_context_internal(
                 format_processed_attribute(processed_attribute, value_match_type,
                                            value_match_index, value_match_count)
             )
+            value_processed.append({
+                "type": "attribute_value",
+                "name": processed_attribute.get("name"),
+                "match_type": value_match_type,
+                "match_index": value_match_index,
+                "match_count": value_match_count,
+                "processed": processed_attribute,
+            })
 
     # Also check valid names
     valid_names = {
@@ -228,15 +289,16 @@ async def _get_attribute_context_internal(
 
     # Also check valid ranks
     valid_ranks = await fetch_valid_ranks()
-    logger.info(f"Checking keyword '{keyword_lower}' against valid ranks: {valid_ranks}")
     if keyword_lower in (rank.lower() for rank in valid_ranks):
         attr_info = [f"Name: {keyword_lower}", "Name Type: rank"]
         rank_attributes.append("\n".join(attr_info))
 
     if not (title_attributes or value_attributes or name_attributes or rank_attributes):
-        return f"""No attributes, names, or ranks found matching keyword '{keyword}'.
-
-        Try different keywords or use a descriptive phrase to expand your search."""
+        markdown = (
+            f"No attributes, names, or ranks found matching keyword '{keyword}'.\n\n"
+            "Try different keywords or use a descriptive phrase to expand your search."
+        )
+        return {"matches": [], "markdown": markdown}
 
     if name_attributes:
         attributes.extend(
@@ -295,7 +357,8 @@ async def _get_attribute_context_internal(
             "'assembly_span'.\n"
         )
 
-    return f"""{DATASTORE_NAME} Attribute Selection Context:
+    # Build markdown (preserve previous formatted output)
+    markdown = f"""{DATASTORE_NAME} Attribute Selection Context:
 
 Choose from the following attributes, names, and ranks to filter {DATASTORE_NAME} data based on your query.
 
@@ -304,12 +367,29 @@ The following attributes, names, and ranks match the keyword '{keyword}':
 {"\n".join(attributes)}
 """
 
+    # Build structured matches list
+    matches: list[dict[str, Any]] = []
+    matches.extend(title_processed)
+    matches.extend(value_processed)
+    # name_attributes are strings like 'Name: scientific_name\nName Type: name'
+    for na in name_attributes:
+        # attempt to parse the name line
+        first_line = na.splitlines()[0]
+        name_val = first_line.replace('Name: ', '').strip() if first_line.startswith('Name:') else na
+        matches.append({"type": "name", "name": name_val, "detail": na})
+    for ra in rank_attributes:
+        first_line = ra.splitlines()[0]
+        name_val = first_line.replace('Name: ', '').strip() if first_line.startswith('Name:') else ra
+        matches.append({"type": "rank", "name": name_val, "detail": ra})
+
+    return {"matches": matches, "markdown": markdown}
+
 
 async def get_attribute_selection_context(
     keyword: str,
     comparison: str | None = None,
     search_index: str = "taxon"
-) -> str:
+ ) -> dict[str, Any]:
     """Get context information for attribute selection.
 
     An LLM MUST use this to choose appropriate attributes to filter by
@@ -339,11 +419,38 @@ async def get_attribute_selection_context(
         keyword: Keyword or phrase  to guide attribute selection
         comparison: Comparison context to guide attribute selection
         search_index: Index type (default: taxon)
+
+    Returns:
+        dict with keys:
+          - "matches": list of match dicts (each with type,name,match metadata,processed)
+          - "markdown": formatted human-readable string with the same content
     """
+    start = time.time()
     logger.info(f"get_attribute_selection_context called: keyword='{keyword}', "
                 f"comparison='{comparison}', search_index={search_index}")
-
-    return await _get_attribute_context_internal(keyword, search_index)
+    try:
+        result = await _get_attribute_context_internal(keyword, search_index)
+        duration_ms = (time.time() - start) * 1000
+        # Log tool usage with match count
+        log_tool_usage(
+            tool_name="get_attribute_selection_context",
+            params={"keyword": keyword, "comparison": comparison, "search_index": search_index},
+            duration_ms=duration_ms,
+            success=True,
+            result_summary={"matches": len(result.get("matches", [])) if isinstance(result, dict) else 0},
+        )
+        return result
+    except Exception as e:
+        duration_ms = (time.time() - start) * 1000
+        log_tool_usage(
+            tool_name="get_attribute_selection_context",
+            params={"keyword": keyword, "comparison": comparison, "search_index": search_index},
+            duration_ms=duration_ms,
+            success=False,
+            error=str(e),
+            exc=e,
+        )
+        raise
 
 
 def register_tools(mcp) -> None:
@@ -353,5 +460,5 @@ def register_tools(mcp) -> None:
         mcp: FastMCP instance to register tools with
     """
     # mcp.tool()(get_valid_types)
-    mcp.tool()(get_metadata_for_attribute)
+    mcp.tool()(get_attribute_info)
     mcp.tool()(get_attribute_selection_context)

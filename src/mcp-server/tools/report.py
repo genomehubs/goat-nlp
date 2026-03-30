@@ -1,5 +1,7 @@
+import time
+
 from ..config import API_BASE, DATASTORE_NAME
-from ..logging_config import get_logger
+from ..logging_config import get_logger, log_tool_usage
 from .artifact_store import retrieve
 from .helpers.api import make_api_request
 from .helpers.axis import axis_opts_to_string
@@ -66,6 +68,20 @@ CHOOSE YOUR REPORT TYPE AND PROVIDE THE REQUIRED PARAMETERS:
    Example: "Which databases contributed to these results?"
             → get_report(intent="sources")
 """
+# Return envelope
+GET_REPORT_PROMPT += """
+
+RETURN ENVELOPE:
+- `user_query`: Original user query string
+- `intent`: The report intent used (e.g., "histogram", "scatter", "tree", "donut", "rainbow", "map", "sources")
+- `report_url`: User-facing URL to view the report
+- `api_url`: The GoaT API URL used to generate the report
+- `raw`: Raw API response object returned from the GoaT report endpoint
+- `report`: Human-readable formatted report text (kept for backward compatibility)
+
+Note: Clients should prefer the structured fields (`report_url`, `api_url`, `raw`) for programmatic handling and may
+      render `report` for display.
+"""
 
 
 async def get_report(
@@ -86,80 +102,81 @@ async def get_report(
     Retrieves axis and filter artifacts, composes query, calls API, formats output.
     """
 
-    # If artifact tokens were provided (string), attempt to retrieve stored objects
-    if isinstance(identifiers_artifact_id, str):
-        identifiers_output = retrieve(identifiers_artifact_id)
-    if isinstance(attributes_artifact_id, str):
-        attributes_output = retrieve(attributes_artifact_id)
+    start = time.time()
 
-    if not isinstance(identifiers_output, dict):
-        raise ValueError(artifact_retrieval_error("identifiers", "get_report"))
-    if not isinstance(attributes_output, dict):
-        raise ValueError(artifact_retrieval_error("attributes", "get_report"))
+    try:
+        # If artifact tokens were provided (string), attempt to retrieve stored objects
+        if isinstance(identifiers_artifact_id, str):
+            identifiers_output = retrieve(identifiers_artifact_id)
+        if isinstance(attributes_artifact_id, str):
+            attributes_output = retrieve(attributes_artifact_id)
 
-    valid_intents = {"histogram", "scatter", "tree", "donut", "rainbow", "map"}
-    if intent not in valid_intents:
-        raise ValueError(
-            invalid_intent_error(intent, valid_intents, "get_report")
+        if not isinstance(identifiers_output, dict):
+            raise ValueError(artifact_retrieval_error("identifiers", "get_report"))
+        if not isinstance(attributes_output, dict):
+            raise ValueError(artifact_retrieval_error("attributes", "get_report"))
+
+        valid_intents = {"histogram", "scatter", "tree", "donut", "rainbow", "map", "sources"}
+        if intent not in valid_intents:
+            raise ValueError(
+                invalid_intent_error(intent, valid_intents, "get_report")
+            )
+
+        # Extract identifiers
+        taxa = identifiers_output.get("taxa", [])
+        assemblies = identifiers_output.get("assemblies", [])
+        samples = identifiers_output.get("samples", [])
+        taxon_filter_type = identifiers_output.get("taxon_filter_type", "children")
+        rank = identifiers_output.get("rank")
+
+        # Extract attributes
+        attributes = attributes_output.get("attributes", [])
+        fields = attributes_output.get("fields", [])
+        names = attributes_output.get("names", [])
+        ranks = attributes_output.get("ranks", [])
+
+        # Retrieve axis and filter artifacts if provided
+        x_axis = None
+        if x_axis_artifact_id and isinstance(x_axis_artifact_id, str):
+            x_axis = retrieve(x_axis_artifact_id)
+            print(f"Retrieved x_axis artifact: {x_axis}")
+
+        y_axis = None
+        if y_axis_artifact_id and isinstance(y_axis_artifact_id, str):
+            y_axis = retrieve(y_axis_artifact_id)
+
+        category = None
+        if category_artifact_id and isinstance(category_artifact_id, str):
+            category = retrieve(category_artifact_id)
+
+        parent_filter = None
+        if parent_filter_artifact_id and isinstance(parent_filter_artifact_id, str):
+            parent_filter = retrieve(parent_filter_artifact_id)
+
+        # Build base search params as dict
+        params = await build_search_params(
+            search_index=search_index,
+            taxa=taxa,
+            taxon_filter_type=taxon_filter_type,
+            assemblies=assemblies,
+            samples=samples,
+            rank=rank,
+            attributes=attributes,
+            fields=fields,
+            names=names,
+            ranks=ranks,
         )
 
-    # Extract identifiers
-    taxa = identifiers_output.get("taxa", [])
-    assemblies = identifiers_output.get("assemblies", [])
-    samples = identifiers_output.get("samples", [])
-    taxon_filter_type = identifiers_output.get("taxon_filter_type", "children")
-    rank = identifiers_output.get("rank")
+        logger.info(f"Built base search params for {intent} report: {params}")
 
-    # Extract attributes
-    attributes = attributes_output.get("attributes", [])
-    fields = attributes_output.get("fields", [])
-    names = attributes_output.get("names", [])
-    ranks = attributes_output.get("ranks", [])
+        # Add report-specific parameters to params dict
+        params["report"] = intent
 
-    # Retrieve axis and filter artifacts if provided
-    x_axis = None
-    if x_axis_artifact_id and isinstance(x_axis_artifact_id, str):
-        x_axis = retrieve(x_axis_artifact_id)
-        print(f"Retrieved x_axis artifact: {x_axis}")
+        x_field = None
 
-    y_axis = None
-    if y_axis_artifact_id and isinstance(y_axis_artifact_id, str):
-        y_axis = retrieve(y_axis_artifact_id)
-
-    category = None
-    if category_artifact_id and isinstance(category_artifact_id, str):
-        category = retrieve(category_artifact_id)
-
-    parent_filter = None
-    if parent_filter_artifact_id and isinstance(parent_filter_artifact_id, str):
-        parent_filter = retrieve(parent_filter_artifact_id)
-
-    # Build base search params as dict
-    params = await build_search_params(
-        search_index=search_index,
-        taxa=taxa,
-        taxon_filter_type=taxon_filter_type,
-        assemblies=assemblies,
-        samples=samples,
-        rank=rank,
-        attributes=attributes,
-        fields=fields,
-        names=names,
-        ranks=ranks,
-    )
-
-    logger.info(f"Built base search params for {intent} report: {params}")
-
-    # Add report-specific parameters to params dict
-    params["report"] = intent
-
-    x_field = None
-
-    # Add axis parameters for distribution reports
-    if intent in {"histogram", "scatter", "tree"}:
-        if x_axis:
-            # x_axis should be from process_axis() output
-            if isinstance(x_axis, dict) and "field_or_rank" in x_axis:
+        # Add axis parameters for distribution reports
+        if intent in {"histogram", "scatter", "tree"}:
+            if x_axis and (isinstance(x_axis, dict) and "field_or_rank" in x_axis):
                 params["x"] = x_axis["field_or_rank"]
                 if not x_axis.get("is_rank"):
                     x_field = x_axis["field_or_rank"]
@@ -172,57 +189,51 @@ async def get_report(
                 #     params["xMod"] = ",".join(x_axis["modifiers"])
                 params["xOpts"] = axis_opts_to_string(x_axis, is_cat=x_axis.get("is_rank", False))
 
-        if intent == "scatter" and y_axis:
-            # y_axis required for scatter
-            if isinstance(y_axis, dict) and "field_or_rank" in y_axis:
+            if intent == "scatter" and y_axis and (isinstance(y_axis, dict) and "field_or_rank" in y_axis):
                 params["y"] = y_axis["field_or_rank"]
                 if y_axis.get("modifiers"):
                     params["yMod"] = ",".join(y_axis["modifiers"])
                 params["yOpts"] = axis_opts_to_string(y_axis, is_cat=y_axis.get("is_rank", False))
 
-        if intent == "tree" and y_axis:
-            # y_axis optional for tree (data at leaves)
-            if isinstance(y_axis, dict) and "field_or_rank" in y_axis:
+            if intent == "tree" and y_axis and (isinstance(y_axis, dict) and "field_or_rank" in y_axis):
                 params["y"] = y_axis["field_or_rank"]
                 if y_axis.get("modifiers"):
                     params["yMod"] = ",".join(y_axis["modifiers"])
                 params["yOpts"] = axis_opts_to_string(y_axis, is_cat=y_axis.get("is_rank", False))
 
-    # Add category parameter (grouping axis)
-    if category and isinstance(category, dict) and "field_or_rank" in category:
-        cat = category["field_or_rank"]
-        catOpts = axis_opts_to_string(category, is_cat=True)
-        params["cat"] = f"{cat}{catOpts}" if catOpts else cat
+        # Add category parameter (grouping axis)
+        if category and isinstance(category, dict) and "field_or_rank" in category:
+            cat = category["field_or_rank"]
+            catOpts = axis_opts_to_string(category, is_cat=True)
+            params["cat"] = f"{cat}{catOpts}" if catOpts else cat
 
-    # Add filter for composition reports (donut, rainbow)
-    if intent in {"donut", "rainbow"} and parent_filter:
-        if isinstance(parent_filter, dict) and "attributes" in parent_filter:
-            # parent_filter contains base attributes for the composition
-            # This would be handled by merging into attributes instead
+        # Add filter for composition reports (donut, rainbow)
+        if intent in {"donut", "rainbow"} and parent_filter and (isinstance(parent_filter, dict) and "attributes" in
+                                                                 parent_filter):
             logger.info(f"Using parent_filter for {intent}: {parent_filter}")
 
-    if x_field is not None:
-        x_query = params.get("query", "").split(" AND ")
-        if x_query[0] != x_field:
-            x_query.insert(0, x_field)
-            params["x"] = " AND ".join(x_query).strip()
-            params.pop("query", None)
+        if x_field is not None:
+            x_query = params.get("query", "").split(" AND ")
+            if x_query[0] != x_field:
+                x_query.insert(0, x_field)
+                params["x"] = " AND ".join(x_query).strip()
+                params.pop("query", None)
 
-    params["rank"] = rank  # Ensure rank is included in params for API
+        params["rank"] = rank  # Ensure rank is included in params for API
 
-    # Convert params dict to URL
-    api_url = params_dict_to_url(f"{API_BASE}/report", params)
+        # Convert params dict to URL
+        api_url = params_dict_to_url(f"{API_BASE}/report", params)
 
-    logger.info(f"Report API URL: {api_url}")
+        logger.info(f"Report API URL: {api_url}")
 
-    # Make API request
-    data = await make_api_request(api_url)
+        # Make API request
+        data = await make_api_request(api_url)
 
-    # Build user-facing URL
-    report_url = build_user_facing_url(api_url)
+        # Build user-facing URL
+        report_url = build_user_facing_url(api_url)
 
-    # Format response
-    result = f"""
+        # Format response
+        result = f"""
 Report generated for {intent} visualisation.
 
 Query: {user_query}
@@ -233,10 +244,62 @@ Report URL:
 Raw API response: {data}
 """
 
-    return {
-        "user_query": user_query,
-        "report": result,
-    }
+        duration_ms = (time.time() - start) * 1000
+        # Summary info for logging
+        result_summary = {
+            "taxa": len(taxa),
+            "assemblies": len(assemblies),
+            "samples": len(samples),
+            "intent": intent,
+        }
+        try:
+            log_tool_usage(
+                tool_name="get_report",
+                params={
+                    "intent": intent,
+                    "search_index": search_index,
+                    "identifiers_artifact_id": identifiers_artifact_id,
+                    "attributes_artifact_id": attributes_artifact_id,
+                },
+                duration_ms=duration_ms,
+                success=True,
+                result_summary=result_summary,
+            )
+        except Exception:
+            logger.exception("Failed to log get_report usage")
+
+        # Return a structured envelope while preserving the human-readable report string
+        return {
+            "user_query": user_query,
+            "intent": intent,
+            "report_url": report_url,
+            "api_url": api_url,
+            "raw": data,
+            "report": result,
+        }
+    except Exception as e:
+        duration_ms = (time.time() - start) * 1000
+        try:
+            log_tool_usage(
+                tool_name="get_report",
+                params={
+                    "intent": intent,
+                    "search_index": search_index,
+                    "identifiers_artifact_id": identifiers_artifact_id,
+                    "attributes_artifact_id": attributes_artifact_id,
+                },
+                duration_ms=duration_ms,
+                success=False,
+                error=str(e),
+                exc=e,
+            )
+        except Exception:
+            logger.exception("Failed to log get_report error")
+        logger.exception("Unexpected error in get_report")
+        raise
+
+    # NOTE: logging is placed after the main return point in a normal flow above.
+    # We also log success/failure around the call to help track usage.
 
 
 get_report.__doc__ = GET_REPORT_PROMPT
@@ -248,4 +311,5 @@ def register_tools(mcp) -> None:
     Args:
         mcp: FastMCP instance to register tools with
     """
+    mcp.tool()(get_report)
     mcp.tool()(get_report)

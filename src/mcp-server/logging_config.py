@@ -1,7 +1,11 @@
 """Shared logging configuration for GenomeHubs MCP server."""
 
+import glob
+import gzip
 import json
 import logging
+import logging.handlers
+import os
 import sys
 import traceback
 import uuid
@@ -17,9 +21,9 @@ LOG_DIR = Path.home() / ".goat-nlp" / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 # Log files
-GENERAL_LOG = LOG_DIR / f"{DATASTORE_NAME}-mcp.log"
-USAGE_LOG = LOG_DIR / f"{DATASTORE_NAME}-usage.jsonl"  # JSON Lines for analysis
-ERROR_LOG = LOG_DIR / f"{DATASTORE_NAME}-errors.log"
+GENERAL_LOG = LOG_DIR / f"{DATASTORE_NAME.lower()}-mcp.log"
+USAGE_LOG = LOG_DIR / f"{DATASTORE_NAME.lower()}-usage.jsonl"  # JSON Lines for analysis
+ERROR_LOG = LOG_DIR / f"{DATASTORE_NAME.lower()}-errors.log"
 
 # Thread-safe context var for the current trace
 _trace_id_var: ContextVar[str] = ContextVar('trace_id', default=None)
@@ -39,11 +43,48 @@ def get_trace_id() -> str:
     return tid
 
 
+class GzipTimedRotatingFileHandler(logging.handlers.TimedRotatingFileHandler):
+    """TimedRotatingFileHandler that gzips rotated log files for disk savings.
+
+    After rollover, any rotated files that are not already gzipped are compressed
+    with gzip and the original is removed.
+    """
+
+    def doRollover(self):
+        super().doRollover()
+        # Compress any rotated files for this base filename
+        pattern = f"{self.baseFilename}.*"
+        for fname in glob.glob(pattern):
+            if fname.endswith(".gz"):
+                continue
+            # Skip the current active log file
+            if os.path.abspath(fname) == os.path.abspath(self.baseFilename):
+                continue
+            try:
+                with (open(fname, "rb") as f_in, gzip.open(f"{fname}.gz", "wb") as f_out):
+                    f_out.writelines(f_in)
+                os.remove(fname)
+            except Exception:
+                # Fail silently - logging shouldn't crash the app
+                logging.getLogger(__name__).exception("Failed to compress rotated log %s", fname)
+
+
 class UsageLogger:
-    """Structured logger for tracking tool usage patterns."""
+    """Structured logger for tracking tool usage patterns using a rotating file handler."""
 
     def __init__(self):
-        self.usage_log = USAGE_LOG
+        # Use a dedicated logger for usage entries so rotation can be applied separately
+        self.logger = logging.getLogger("goat.usage")
+        # If no handlers configured for this logger, add one
+        if not any(isinstance(h, (logging.handlers.TimedRotatingFileHandler, GzipTimedRotatingFileHandler))
+                   for h in self.logger.handlers):
+            handler = GzipTimedRotatingFileHandler(str(USAGE_LOG), when="midnight", backupCount=30, utc=False)
+            handler.suffix = "%Y-%m-%d"
+            handler.setLevel(logging.INFO)
+            # The logger will write raw JSON lines, so use a simple message formatter
+            handler.setFormatter(logging.Formatter("%(message)s"))
+            self.logger.addHandler(handler)
+            self.logger.propagate = False
 
     def log_tool_call(
         self,
@@ -55,15 +96,10 @@ class UsageLogger:
         result_summary: dict[str, Any] | None = None,
         error_details: dict[str, Any] | None = None,
     ):
-        """Log a tool invocation with structured data.
+        """Log a tool invocation with structured JSON data (one JSON object per line).
 
-        Args:
-            tool_name: Name of the tool called
-            params: Parameters passed to the tool
-            duration_ms: Execution time in milliseconds
-            success: Whether the call succeeded
-            error: Error message if failed
-            result_summary: Summary stats about the result (count, fields, etc.)
+        This writes a single JSON object per line to the usage log via the dedicated
+        usage logger, which handles rotation and compression.
         """
         entry = {
             "timestamp": datetime.now().isoformat(),
@@ -76,16 +112,20 @@ class UsageLogger:
             "error_details": error_details or {},
             "result_summary": result_summary or {}
         }
-
-        with open(self.usage_log, "a") as f:
-            f.write(json.dumps(entry) + "\n")
+        # Write JSON line via logger so it benefits from rotation/compression
+        try:
+            self.logger.info(json.dumps(entry, default=str))
+        except Exception:
+            # Last-resort fallback to append (avoid losing logs)
+            try:
+                with open(USAGE_LOG, "a") as f:
+                    f.write(json.dumps(entry, default=str) + "\n")
+            except Exception:
+                logging.getLogger(__name__).exception("Failed to write usage log entry")
 
     def _sanitize_params(self, params: dict) -> dict:
         """Remove sensitive data from params before logging."""
-        # Copy and sanitize
-        sanitized = params.copy()
-        # Could filter auth tokens, personal data, etc. if needed
-        return sanitized
+        return params.copy()
 
 
 general_handler = logging.FileHandler(GENERAL_LOG)
@@ -148,8 +188,7 @@ def log_tool_usage(
     if active_exc is not None and hasattr(active_exc, "__traceback__"):
         tb = active_exc.__traceback__
         if tb is not None:
-            frames = traceback.extract_tb(tb)
-            if frames:
+            if frames := traceback.extract_tb(tb):
                 last = frames[-1]
                 error_details = {
                     "type": type(active_exc).__name__,

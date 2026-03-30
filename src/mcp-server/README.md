@@ -7,7 +7,7 @@ Individual instances should be site-scoped by updating the configuration as desc
 
 **Tools**
 
-- **Attributes:** `get_metadata_for_attribute`, `get_attribute_selection_context` — Inspect attribute metadata and help choose valid attribute names, modifiers and operators.
+- **Attributes:** `get_attribute_info`, `get_attribute_selection_context` — Inspect attribute metadata and help choose valid attribute names, modifiers and operators.
 - **Process attributes:** `process_attributes` — Validate and canonicalise attribute filters, fields, names and ranks; returns an artifact token for downstream steps.
 - **Process identifiers:** `process_identifiers` — Extract and validate taxa, assemblies, samples, rank and `taxon_filter_type`; returns an artifact token.
 - **Query runner:** `submit_query` — Combine identifier and attribute artifacts into a query URL and execute the search; supports intents: `count`, `table`, `histogram`, `record`.

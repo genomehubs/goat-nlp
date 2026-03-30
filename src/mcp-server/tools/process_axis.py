@@ -1,9 +1,10 @@
 """Process axis tool for preparing simple axis definitions for report visualisations."""
 
+import time
 from typing import Any
 
 from ..config import DATASTORE_NAME
-from ..logging_config import get_logger
+from ..logging_config import get_logger, log_tool_usage
 from .helpers.constants import FIELD_CACHE
 from .helpers.errors import (
     invalid_attribute_error,
@@ -25,7 +26,8 @@ PROCESS_AXIS_PROMPT = (
 This tool handles SIMPLE axis definitions: field names, ranks, or fields with modifiers.
 For COMPLEX axes (with operators, value filters, or identifier constraints), use process_axis_complex() instead.
 
-If successful, this tool returns an artifact token that can be passed to get_report().
+If successful, this tool returns the processed axis payload and an artifact token (dict with `artifact_id`) that can
+be passed to `get_report()`.
 
 WHEN TO USE THIS TOOL:
 - Axis is a field name: "genome_size", "assembly_level"
@@ -157,7 +159,9 @@ async def process_axis(
         search_index: The search index to use ("taxon", "assembly", or "sample")
 
     Returns:
-        A dictionary with processed axis definition for {DATASTORE_NAME} API queries.
+                A dictionary with the processed axis definition for {DATASTORE_NAME} API queries, plus:
+                    - `artifact_id`: artifact token string to retrieve the stored axis via the artifact store
+                Example: {"axis_name": "x", "field_or_rank": "genome_size", ..., "artifact_id": "tok_..."}
     """
     # Validate axis_name
     valid_axis_names = {"x", "y", "z", "category"}
@@ -249,7 +253,40 @@ async def process_axis(
         "user_query": user_query,
     }
 
-    return finalise_and_store(result)
+    # Finalise and store the axis artifact, then log usage
+    start = time.time()
+    try:
+        stored = finalise_and_store(result)
+        duration_ms = (time.time() - start) * 1000
+        try:
+            log_tool_usage(
+                tool_name="process_axis",
+                params={"axis_name": axis_name, "axis_definition": axis_definition},
+                duration_ms=duration_ms,
+                success=True,
+                result_summary={
+                    "is_rank": is_rank,
+                    "artifact_id": stored.get("artifact_id") if isinstance(stored, dict) else None,
+                },
+            )
+        except Exception:
+            logger.exception("Failed to log process_axis usage")
+        # Return the processed payload plus artifact_id (consistent with other process_* tools)
+        return {**result, "artifact_id": stored.get("artifact_id")}
+    except Exception as e:
+        duration_ms = (time.time() - start) * 1000
+        try:
+            log_tool_usage(
+                tool_name="process_axis",
+                params={"axis_name": axis_name, "axis_definition": axis_definition},
+                duration_ms=duration_ms,
+                success=False,
+                error=str(e),
+                exc=e,
+            )
+        except Exception:
+            logger.exception("Failed to log process_axis error")
+        raise
 
 
 process_axis.__doc__ = PROCESS_AXIS_PROMPT

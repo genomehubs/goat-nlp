@@ -1,49 +1,32 @@
-"""Guidance tool to help LLMs choose the correct attribute type."""
+"""Guidance tool to help LLMs choose the correct attribute type.
 
-from ..logging_config import get_logger
+Returns a structured envelope: {"guidance": str, "query_type": str}.
+"""
+
+import time
+
+from ..logging_config import get_logger, log_tool_usage
 
 logger = get_logger(__name__)
 
 
-async def get_attribute_guide(query_type: str) -> str:
+async def get_attribute_guide(query_type: str) -> dict[str, str]:
     """Get guidance on which attributes to use for CONFUSING query types.
 
-    ⚠️ SCOPE: This tool ONLY handles 4 confusing cases:
-    - target_list vs sequencing_status (project queries)
-    - protected_status vs conservation_status
-
-    For ALL OTHER attributes (genome_size, chromosome_number, assembly_level, etc.),
-    use get_attribute_selection_context instead.
-
-    CRITICAL: Call this when the query mentions projects like DToL, CANBP, VGP
-    to avoid confusing "target list" with "sequencing status".
-
-    Query types:
-    - "target_list": For questions about which species are ON a list/project
-      Example: "How many species are on the DToL target list?"
-      → Use attribute: long_list with value: dtol
-      → NOT sequencing_status_dtol
-
-    - "sequencing_status": For questions about sequencing progress/stage
-      Example: "How many species have completed sequencing for DToL?"
-      → Use attribute: sequencing_status_dtol
-      → NOT long_list
-
-    - "protected_status": For questions about conservation/legal protection
-      Example: "Which species have protected status?"
-      → Use attribute: protected_status
-
-    - "conservation_status": For questions about threat level
-      Example: "Which species have endangered status?"
-      → Use attribute: conservation_status
+    Scope: This tool handles four cases: target_list, sequencing_status,
+    protected_status, conservation_status. For other attributes use
+    `get_attribute_selection_context`.
 
     Args:
-        query_type: Type of query - choose ONE:
-            - "target_list": "on the DToL list", "targeted by VGP", "on CANBP list"
-            - "sequencing_status": "sequencing completed", "sequencing in progress", "data available"
-            - "protected_status": "protected status", "legal protection", "endangered"
-            - "conservation_status": "threat status", "conservation level"
+      query_type: Type of query (one of: "target_list", "sequencing_status",
+            "protected_status", "conservation_status")
+
+    Returns:
+      dict with keys:
+        - "guidance": guidance text
+        - "query_type": canonicalized query type string
     """
+    start = time.time()
     guidance = {
         "target_list": """TARGET LIST ATTRIBUTES (which species are ON a list):
 
@@ -94,18 +77,47 @@ Use when query asks:
     }
 
     query_lower = query_type.lower().strip()
-    if query_lower in guidance:
-        return guidance[query_lower]
-
-    return f"""Unknown query type: '{query_type}'
-
-Valid types:
-- target_list: "on the DToL list", "targeted by", "on CANBP list"
-- sequencing_status: "sequencing completed", "data available", "in progress"
-- protected_status: "protected", "legal protection"
-- conservation_status: "endangered", "threatened", "threat level"
-
-Call get_attribute_guide with one of these types for detailed guidance."""
+    try:
+        if query_lower in guidance:
+            duration_ms = (time.time() - start) * 1000
+            log_tool_usage(
+                tool_name="get_attribute_guide",
+                params={"query_type": query_type},
+                duration_ms=duration_ms,
+                success=True,
+                result_summary={"provided": True},
+            )
+            return {"guidance": guidance[query_lower], "query_type": query_lower}
+        msg = (
+            f"Unknown query type: '{query_type}'\n\n"
+            "Valid types:\n"
+            "- target_list\n"
+            "- sequencing_status\n"
+            "- protected_status\n"
+            "- conservation_status\n"
+            "Call get_attribute_guide with one of these types for detailed guidance."
+        )
+        duration_ms = (time.time() - start) * 1000
+        log_tool_usage(
+            tool_name="get_attribute_guide",
+            params={"query_type": query_type},
+            duration_ms=duration_ms,
+            success=False,
+            error="unknown_query_type",
+            result_summary={"provided": False},
+        )
+        return {"guidance": msg, "query_type": query_type}
+    except Exception as e:
+        duration_ms = (time.time() - start) * 1000
+        log_tool_usage(
+            tool_name="get_attribute_guide",
+            params={"query_type": query_type},
+            duration_ms=duration_ms,
+            success=False,
+            error=str(e),
+            exc=e,
+        )
+        raise
 
 
 def register_tools(mcp) -> None:

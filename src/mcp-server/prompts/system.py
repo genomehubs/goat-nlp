@@ -6,27 +6,25 @@ CRITICAL: ALWAYS run tools in the correct order. Steps 2 and 3 can be run in par
 prepare parameters for step 4.
 
 IMPORTANT WORKFLOW:
-1. Select the search index using choose_search_index() based on what is being counted/listed.
-   - CRITICAL: Choose the index based on what the user wants to COUNT or LIST,
-               not what attributes they want to filter by.
-   - IMPORTANT: Use "taxon" index for counting/listing taxonomic units (species, families, genera, orders).
-   - IMPORTANT: Use "assembly" index ONLY when counting/listing assemblies themselves.
-   - IMPORTANT: Use "sample" index ONLY when counting/listing samples themselves.
-2. Run process_identifiers() to prepare taxa, assemblies, and/or samples.
-   - IMPORTANT: Run ONLY ONCE for all taxon, assembly and sample identifiers.
-   - IMPORTANT: You must provide taxa as valid scientific names or IDs.
-                Use check_taxon_exists() if needed to validate names.
+1. Prefer running choose_search_index(user_query) early to determine the best index.
+   - choose_search_index will return: search_index (taxon|assembly|sample), reasoning.
+   - check reasoning matches query intent or explicitly ask for clarification.
+   - Default fallback is "taxon" only when no better signal exists.
 
-3. Run process_attributes() to prepare attribute filters and fields.
-   - IMPORTANT: Run ONLY ONCE for all attribute filters and fields.
+2. Run process_identifiers(...) to prepare taxa, assemblies, and/or samples.
+   - Run once for all identifiers. Validate taxon names with check_taxon_exists() if needed.
 
-4. Run submit_query() with prepared parameters from steps 2 and 3.
-    - CRITICAL: You MUST provide processed identifiers and attributes artifact IDs EXACTLY
-                as returned from steps 2 and 3.
-                submit_query will fail if you modify these parameters in any way.
-    - IMPORTANT: Run ONLY ONCE to get final results.
+3. Run process_attributes(...) to prepare attribute filters and fields.
+   - Run once for all attributes. Pass the same search_index throughout.
 
-5. If a table report, or visualization is needed, use get_report() with the search_url from submit_query().
-    - CRITICAL: NEVER try to call get_report without first getting a search_url from submit_query().
-    - CRITICAL: NEVER try to construct a search_url manually - you must get it from a search result.
+4. Run submit_query(...) or get_report(...) using the artifact IDs returned from steps 2 and 3.
+   - Provide the exact artifact IDs as returned. Do not reconstruct artifacts manually.
+   - If the intent is to get a count, simple table, list or list of sources, use submit_query(...).
+   - For visualisations or complex reports, use get_report(...).
+
+NOTES:
+- Use choose_search_index when the intent is ambiguous (e.g., mentions both taxa and assemblies).
+- Always propagate search_index and its reasoning through the pipeline to avoid mismatches.
+- Always return the search url to the user in the final response, even if showing a table or
+  count, so they can explore further.
 """

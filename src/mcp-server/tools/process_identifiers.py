@@ -47,7 +47,7 @@ FOLLOW THESE STEPS EXACTLY:
      For NOT filters, prefix with !, e.g. samples=["SRR1234567", "!SRR7654321"]
      If no samples are mentioned, pass an empty list: samples=[]
 
-  If an identifier does not match any of the above types, consider that it may be an attribute that should be 
+  If an identifier does not match any of the above types, consider that it may be an attribute that should be
   processed with process_attributes() instead.
 
 2. **rank** (if applicable): The taxonomic rank
@@ -180,7 +180,7 @@ async def process_identifiers(
         )
 
         return {**result, "artifact_id": stored_result["artifact_id"]}
-    
+
     except Exception as e:
         duration_ms = (time.time() - start) * 1000
         logger.exception("Error in process_identifiers")

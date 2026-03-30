@@ -1,8 +1,11 @@
 import time
 
 from ..config import API_BASE, DATASTORE_NAME, WEB_URL
+from ..logging_config import get_logger, log_tool_usage
 from .helpers.api import make_api_request
 from .helpers.search_index import infer_index_from_query
+
+logger = get_logger(__name__)
 
 RANK_CACHE: list[str] = []
 _RANK_CACHE_TIMESTAMP: float = 0.0
@@ -36,7 +39,29 @@ async def fetch_valid_ranks() -> list[str]:
 
 async def get_valid_ranks() -> list[str]:
     f"""Fetch valid taxon ranks from {DATASTORE_NAME} API."""
-    return await fetch_valid_ranks()
+    start = time.time()
+    try:
+        ranks = await fetch_valid_ranks()
+        duration_ms = (time.time() - start) * 1000
+        log_tool_usage(
+            tool_name="get_valid_ranks",
+            params={},
+            duration_ms=duration_ms,
+            success=True,
+            result_summary={"count": len(ranks) if ranks is not None else 0},
+        )
+        return ranks
+    except Exception as e:
+        duration_ms = (time.time() - start) * 1000
+        log_tool_usage(
+            tool_name="get_valid_ranks",
+            params={},
+            duration_ms=duration_ms,
+            success=False,
+            error=str(e),
+            exc=e,
+        )
+        raise
 
 
 async def choose_search_index(query: str) -> dict:
@@ -82,7 +107,31 @@ async def choose_search_index(query: str) -> dict:
     Returns:
         dict with keys: search_index (one of "taxon", "assembly", "sample"), reasoning (explanation of choice)
     """
-    return infer_index_from_query(query)
+    start = time.time()
+    try:
+        result = infer_index_from_query(query)
+        duration_ms = (time.time() - start) * 1000
+        # result may be dict or simple value
+        summary = result.get("search_index") if isinstance(result, dict) else str(result)
+        log_tool_usage(
+            tool_name="choose_search_index",
+            params={"query_len": len(query) if query is not None else 0},
+            duration_ms=duration_ms,
+            success=True,
+            result_summary={"search_index": summary},
+        )
+        return result
+    except Exception as e:
+        duration_ms = (time.time() - start) * 1000
+        log_tool_usage(
+            tool_name="choose_search_index",
+            params={"query_len": len(query) if query is not None else 0},
+            duration_ms=duration_ms,
+            success=False,
+            error=str(e),
+            exc=e,
+        )
+        raise
 
 
 async def check_taxon_exists(name: str, response_format: str = "data") -> dict:
@@ -123,11 +172,22 @@ async def check_taxon_exists(name: str, response_format: str = "data") -> dict:
         count_in_{DATASTORE_NAME.lower()}, url, markdown
         (only populated fields depend on response_format, but full envelope always returned)
     """
+
+    start = time.time()
     # Query API
     url = f"{API_BASE}/count?query=tax_tree%28{name}%29&result=taxon&offset=0&includeEstimates=true&taxonomy=ncbi"
     count_data = await make_api_request(url)
 
     if not count_data or "count" not in count_data:
+        duration_ms = (time.time() - start) * 1000
+        log_tool_usage(
+            tool_name="check_taxon_exists",
+            params={"name": name, "response_format": response_format},
+            duration_ms=duration_ms,
+            success=False,
+            error="api_query_failed",
+            result_summary={"provided": False},
+        )
         return {
             "exists": False,
             "scientific_name": name,
@@ -135,6 +195,14 @@ async def check_taxon_exists(name: str, response_format: str = "data") -> dict:
         }
 
     if count_data["count"] == 0:
+        duration_ms = (time.time() - start) * 1000
+        log_tool_usage(
+            tool_name="check_taxon_exists",
+            params={"name": name, "response_format": response_format},
+            duration_ms=duration_ms,
+            success=True,
+            result_summary={"exists": False, f"count_in_{DATASTORE_NAME.lower()}": 0},
+        )
         return {
             "exists": False,
             "scientific_name": name,
@@ -173,6 +241,19 @@ async def check_taxon_exists(name: str, response_format: str = "data") -> dict:
             f"- Records in {DATASTORE_NAME}: {count_data['count']}\n"
             f"- [View in {DATASTORE_NAME}]({record_url})"
         )
+
+    duration_ms = (time.time() - start) * 1000
+    try:
+        log_tool_usage(
+            tool_name="check_taxon_exists",
+            params={"name": name, "response_format": response_format},
+            duration_ms=duration_ms,
+            success=True,
+            result_summary={"exists": True, f"count_in_{DATASTORE_NAME.lower()}": count_data["count"]},
+        )
+    except Exception:
+        # Ensure that logging failures don't break main flow
+        logger.exception("Failed to log check_taxon_exists usage")
 
     # If client requested only one format, could return just that field
     # but returning full envelope is more flexible

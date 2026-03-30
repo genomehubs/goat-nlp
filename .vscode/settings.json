@@ -1,14 +1,33 @@
 {
   "git.ignoreLimitWarning": true,
-  "editor.formatOnSave": true,
-  "flake8.args": ["--max-line-length=118"],
+
+  // Enable formatting and linting for Python
   "[python]": {
-    "editor.codeActionsOnSave": {
-      "source.organizeImports.python": "explicit"
-    },
+    "editor.formatOnSave": true,
+    "editor.formatOnType": true,
     "editor.defaultFormatter": "ms-python.black-formatter",
-    "editor.formatOnSave": true
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit"
+    }
   },
+
+  // Python specific
+  "python.formatting.provider": "black",
+  "python.formatting.blackArgs": ["--line-length", "88"],
+  "python.linting.flake8Enabled": true,
+  "python.linting.enabled": true,
+  "python.linting.flake8Args": ["--max-line-length=88"],
+  "python.sortImports.args": ["--profile", "black"],
+
+  // Enable error lens
+  "errorLens.enabled": true,
+
+  // iSort will respect Black style
+  "isort.args": ["--profile", "black"],
+
+  // Enable auto save
+  "files.autoSave": "onFocusChange",
+  "cSpell.words": ["Kinfin", "proteome"],
   "python-envs.defaultEnvManager": "ms-python.python:conda",
   "python-envs.defaultPackageManager": "ms-python.python:conda",
   "python-envs.pythonProjects": []

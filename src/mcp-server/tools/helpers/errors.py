@@ -3,6 +3,10 @@ from .validation import validate_attribute_value
 # helpers/errors.py
 """Centralized error messages for LLM-facing tools."""
 
+import urllib.parse
+
+from ...config import ISSUE_TEMPLATE_UNHANDLED_ERROR, ISSUE_URL
+
 
 class LLMError(Exception):
     """Base class for LLM-facing errors with helpful messages."""
@@ -106,3 +110,38 @@ Please check your values and try again."""
             return str(e)
 
     return None
+
+
+def format_unhandled_error_for_issue(tool_name: str, error_message: str) -> dict:
+    """Format an unhandled error for user-facing response with issue reporting guidance.
+
+    Returns a dict with:
+    - user_message: Safe, friendly message to return to the user
+    - issue_body: Pre-formatted issue body for bug tracking
+    - issue_url: URL to issues page
+    - issue_create_url: URL pre-filled with issue title and body (for convenient reporting)
+    """
+    # Format the issue body using the configured template
+    issue_body = ISSUE_TEMPLATE_UNHANDLED_ERROR.format(
+        tool_name=tool_name,
+        error_message=error_message,
+    )
+
+    # Create a pre-filled GitHub issue URL
+    issue_title = f"Unhandled error in {tool_name}"
+    quoted_title = urllib.parse.quote(issue_title)
+    quoted_body = urllib.parse.quote(issue_body)
+    issue_create_url = f"{ISSUE_URL}/new?title={quoted_title}&body={quoted_body}"
+
+    # User-facing message (doesn't expose raw error)
+    user_message = (
+        f"An unexpected error occurred in {tool_name}. "
+        f"Please help us improve by reporting this issue."
+    )
+
+    return {
+        "user_message": user_message,
+        "issue_body": issue_body,
+        "issue_url": ISSUE_URL,
+        "issue_create_url": issue_create_url,
+    }

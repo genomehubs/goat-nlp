@@ -14,6 +14,11 @@ MCP_DESCRIPTION = (
     f"The {SITE_NAME} (Model Context Protocol) server is an AI-powered "
     f"interface for querying {DATASTORE_FULL_NAME}."
 )
+ISSUE_URL = "https://github.com/genomehubs/goat-nlp/issues"  # URL for users to report issues
+ISSUE_TEMPLATE_UNHANDLED_ERROR = (
+    "Unhandled error in tool '{tool_name}': {error_message}\n\n"
+    "Please investigate the error and consider adding handling for this case in the tool implementation."
+)
 
 BROWSER_PAGE_CONFIG = {
     # Site branding
@@ -45,6 +50,7 @@ BROWSER_PAGE_CONFIG = {
         {"name": f"{DATASTORE_NAME} Database", "url": WEB_URL},
         {"name": f"{DATASTORE_NAME} API Documentation", "url": f"{WEB_URL}/api-docs"},
         {"name": "View registered tools", "url": "/debug/tools"},
+        {"name": "Report an Issue", "url": ISSUE_URL},
     ],
 
     # MCP connection info
