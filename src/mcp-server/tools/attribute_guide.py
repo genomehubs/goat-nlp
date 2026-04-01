@@ -1,7 +1,4 @@
-"""Guidance tool to help LLMs choose the correct attribute type.
-
-Returns a structured envelope: {"guidance": str, "query_type": str}.
-"""
+"""Guidance tool to help LLMs choose the correct attribute type."""
 
 import time
 
@@ -10,7 +7,7 @@ from ..logging_config import get_logger, log_tool_usage
 logger = get_logger(__name__)
 
 
-async def get_attribute_guide(query_type: str) -> dict[str, str]:
+async def get_attribute_guide(query_type: str) -> str:
     """Get guidance on which attributes to use for CONFUSING query types.
 
     Scope: This tool handles four cases: target_list, sequencing_status,
@@ -22,9 +19,7 @@ async def get_attribute_guide(query_type: str) -> dict[str, str]:
             "protected_status", "conservation_status")
 
     Returns:
-      dict with keys:
-        - "guidance": guidance text
-        - "query_type": canonicalized query type string
+      Formatted guidance string for the given query type.
     """
     start = time.time()
     guidance = {
@@ -87,16 +82,7 @@ Use when query asks:
                 success=True,
                 result_summary={"provided": True},
             )
-            return {"guidance": guidance[query_lower], "query_type": query_lower}
-        msg = (
-            f"Unknown query type: '{query_type}'\n\n"
-            "Valid types:\n"
-            "- target_list\n"
-            "- sequencing_status\n"
-            "- protected_status\n"
-            "- conservation_status\n"
-            "Call get_attribute_guide with one of these types for detailed guidance."
-        )
+            return guidance[query_lower]
         duration_ms = (time.time() - start) * 1000
         log_tool_usage(
             tool_name="get_attribute_guide",
@@ -106,7 +92,7 @@ Use when query asks:
             error="unknown_query_type",
             result_summary={"provided": False},
         )
-        return {"guidance": msg, "query_type": query_type}
+        return f"Unknown query type: '{query_type}'\n\nValid types:\n- target_list\n- sequencing_status\n- protected_status\n- conservation_status\nCall get_attribute_guide with one of these types for detailed guidance."
     except Exception as e:
         duration_ms = (time.time() - start) * 1000
         log_tool_usage(

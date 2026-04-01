@@ -21,7 +21,7 @@ async def get_valid_types(search_index: str = "taxon") -> dict[str, Any]:
 
 async def get_attribute_info(
     attribute: str, search_index: str = "taxon"
-) -> dict[str, Any]:
+) -> str:
     f"""Get metadata for a specific attribute in {DATASTORE_NAME}.
 
     ONLY use this to get detailed information about a single attribute, such
@@ -31,10 +31,7 @@ async def get_attribute_info(
     DO NOT use this tool to guess attribute names or validate multiple attributes at once.
 
     Returns:
-        dict with keys:
-          - "exists": bool
-          - "data": processed attribute dict (or empty dict)
-          - "markdown": formatted string representation (or error message)
+        Formatted markdown string with attribute metadata, or an error message if not found.
 
     Args:
         attribute: Name of the attribute to get metadata for
@@ -57,7 +54,7 @@ async def get_attribute_info(
                     "processed_type": fields[attribute].get("processed_type"),
                 },
             )
-            return {"exists": True, "data": processed, "markdown": formatted}
+            return formatted
 
         duration_ms = (time.time() - start) * 1000
         msg = f"Attribute '{attribute}' not found."
@@ -68,7 +65,7 @@ async def get_attribute_info(
             success=False,
             error=msg,
         )
-        return {"exists": False, "data": {}, "markdown": msg}
+        return msg
     except Exception as e:
         duration_ms = (time.time() - start) * 1000
         log_tool_usage(
@@ -389,7 +386,7 @@ async def get_attribute_selection_context(
     keyword: str,
     comparison: str | None = None,
     search_index: str = "taxon"
- ) -> dict[str, Any]:
+ ) -> str:
     """Get context information for attribute selection.
 
     An LLM MUST use this to choose appropriate attributes to filter by
@@ -421,9 +418,7 @@ async def get_attribute_selection_context(
         search_index: Index type (default: taxon)
 
     Returns:
-        dict with keys:
-          - "matches": list of match dicts (each with type,name,match metadata,processed)
-          - "markdown": formatted human-readable string with the same content
+        Formatted markdown string listing matching attributes, names, and ranks.
     """
     start = time.time()
     logger.info(f"get_attribute_selection_context called: keyword='{keyword}', "
@@ -439,7 +434,7 @@ async def get_attribute_selection_context(
             success=True,
             result_summary={"matches": len(result.get("matches", [])) if isinstance(result, dict) else 0},
         )
-        return result
+        return result["markdown"]
     except Exception as e:
         duration_ms = (time.time() - start) * 1000
         log_tool_usage(
