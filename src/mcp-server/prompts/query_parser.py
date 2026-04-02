@@ -1,4 +1,9 @@
-LLM_PROMPT_ORIGINAL = """IMPORTANT: pass the original user query string as `user_query`. The LLM MUST NOT modify this!
+# LLM_PROMPT_ORIGINAL removed — was never imported or used at runtime.
+# The default single-stage prompt below (LLM_PROMPT_DEFAULT) is kept for
+# reference but is also superseded by the multi-stage system prompt in
+# prompts/system.py (get_multi_stage_prompt), which is what the server uses.
+
+_REMOVED_PLACEHOLDER = """IMPORTANT: pass the original user query string as `user_query`. The LLM MUST NOT modify this!
 
     Extract as many of the following parameters as possible. If a parameter is absent pass an empty list or string.
 
@@ -210,6 +215,5 @@ entry.
 """
 
 prompts = {
-    "original": LLM_PROMPT_ORIGINAL,
     "default": LLM_PROMPT_DEFAULT,
 }
